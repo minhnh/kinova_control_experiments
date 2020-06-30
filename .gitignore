@@ -30,3 +30,7 @@
 *.exe
 *.out
 *.app
+
+# generated code folder
+generated
+build
