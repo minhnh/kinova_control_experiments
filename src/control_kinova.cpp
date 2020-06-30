@@ -12,8 +12,7 @@
 #include <time.h>
 
 #include "kinova_util.h"
-
-#include <google/protobuf/util/json_util.h>
+#include "abag.h"
 
 #include <unistd.h>
 
@@ -28,7 +27,7 @@ const int SECOND = 1000000;
 #define RAD_TO_DEG(x) (x) * 180.0 / PI
 #define ACTUATOR_COUNT 7
 
-float TIME_DURATION = 30.0f; // Duration of the example (seconds)
+float TIME_DURATION = 5.0f; // Duration of the example (seconds)
 
 std::chrono::steady_clock::time_point loop_start_time;
 std::chrono::duration <double, std::micro> loop_interval{};
@@ -48,7 +47,11 @@ int enforce_loop_frequency(const int dt)
     else return -1; //Loop is too slow
 }
 
-bool example_cyclic_torque_control(k_api::Base::BaseClient* base, k_api::BaseCyclic::BaseCyclicClient* base_cyclic, k_api::ActuatorConfig::ActuatorConfigClient* actuator_config)
+bool example_cyclic_torque_control (
+    k_api::Base::BaseClient* base,
+    k_api::BaseCyclic::BaseCyclicClient* base_cyclic,
+    k_api::ActuatorConfig::ActuatorConfigClient* actuator_config
+)
 {
     const int RATE_HZ = 600; // Hz
     const int DT_MICRO = SECOND / RATE_HZ;
@@ -100,9 +103,13 @@ bool example_cyclic_torque_control(k_api::Base::BaseClient* base, k_api::BaseCyc
 
 
         const std::vector<double> joint_torque_limits {39.0, 39.0, 39.0, 39.0, 9.0, 9.0, 9.0};
-        double desired_vel = 4.0; //deg/s
+        const double alpha = 0.8;
+        double desired_vel = 6.0, current_vel = 0.0; //deg/s
         double error = 0.0;
         double abag_command = 0.0;
+        abagState_t abagState;
+        FILE * fp = fopen("simulated_data.csv", "w+");
+        fprintf(fp, "error, signed, bias, gain, e_bar, e_bar_prev, actuation, currentVel\n");
 
         // Real-time loop
         while (total_time_sec < task_time_limit_sec)
@@ -140,14 +147,22 @@ bool example_cyclic_torque_control(k_api::Base::BaseClient* base, k_api::BaseCyc
             //     base_command.mutable_actuators(i)->set_torque_joint(jnt_command_torque(i));
             // }
 
-            error = desired_vel - base_feedback.actuators(6).velocity();
-            printf("error: %f\n \n", error);
-            // abag_command = abag.do_stuff(error);
+            current_vel = base_feedback.actuators(6).velocity();
+            if (total_time_sec > task_time_limit_sec * 0.1 && total_time_sec < task_time_limit_sec * 0.9) {
+                error = desired_vel - current_vel;
+            } else {
+                error = 0.0 - current_vel;
+            }
+
+            fprintf(fp, "%.5f, %.5f, %.5f, %.5f, %.5f, %.5f, %.5f\n",
+                error, abagState.signedErr_access, abagState.bias_access, abagState.gain_access,abagState.eBar_access,
+                abag_command, current_vel);
+            abag_sched(&abagState, &error, &abag_command, &alpha);
 
             base_command.mutable_actuators(6)->set_position(base_feedback.actuators(6).position());
 
-            // base_command.mutable_actuators(6)->set_torque_joint(abag_command * joint_torque_limits[6]);
-            base_command.mutable_actuators(6)->set_torque_joint(1.0);
+            base_command.mutable_actuators(6)->set_torque_joint(abag_command * joint_torque_limits[6] * 0.8);
+            // base_command.mutable_actuators(6)->set_torque_joint(1.0);
 
             // Incrementing identifier ensures actuators can reject out of time frames
             base_command.set_frame_id(base_command.frame_id() + 1);
@@ -180,6 +195,7 @@ bool example_cyclic_torque_control(k_api::Base::BaseClient* base, k_api::BaseCyc
             // Enforce the constant loop time and count how many times the loop was late
             if (enforce_loop_frequency(DT_MICRO) != 0) control_loop_delay_count++;
         }
+        fclose(fp);
 
         std::cout << "Torque control example completed" << std::endl;
 

@@ -6,9 +6,7 @@ set(CMAKE_INCLUDE_CURRENT_DIR   ON)
 set(CMAKE_VERBOSE_MAKEFILE      ON)
 set(CMAKE_COLOR_MAKEFILE        ON)
 
-if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE Release)
-endif()
+set(CMAKE_BUILD_TYPE Release)
 
 # Activate C++ 11
 set (CMAKE_CXX_STANDARD 11)
@@ -35,7 +33,12 @@ include_directories(${KORTEX_DIR}/include/client_stubs)
 # user code
 include_directories(${PROJECT_SOURCE_DIR}/include)
 include_directories(${PROJECT_SOURCE_DIR}/generated)
+set_source_files_properties(generated/abag.c PROPERTIES LANGUAGE CXX )
 
 link_libraries(pthread)
 
-add_executable(control_kinova src/control_kinova.cpp src/kinova_util.cpp)
+add_executable(control_kinova
+    src/control_kinova.cpp
+    src/kinova_util.cpp
+    generated/abag.c
+)
