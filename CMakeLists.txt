@@ -33,8 +33,9 @@ include_directories(${KORTEX_DIR}/include/messages)
 include_directories(${KORTEX_DIR}/include/client_stubs)
 
 # user code
+include_directories(${PROJECT_SOURCE_DIR}/include)
 include_directories(${PROJECT_SOURCE_DIR}/generated)
 
 link_libraries(pthread)
 
-add_executable(control_kinova src/control_kinova.cpp)
+add_executable(control_kinova src/control_kinova.cpp src/kinova_util.cpp)

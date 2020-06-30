@@ -1,0 +1,39 @@
+#ifndef _KINOVA_UTIL_H_
+#define _KINOVA_UTIL_H_
+
+#include <string>
+#include <memory>
+
+#include <BaseClientRpc.h>
+#include <BaseCyclicClientRpc.h>
+#include <ActuatorConfigClientRpc.h>
+#include <SessionClientRpc.h>
+#include <SessionManager.h>
+#include <RouterClient.h>
+#include <TransportClientUdp.h>
+#include <TransportClientTcp.h>
+
+namespace k_api = Kinova::Api;
+
+class KinovaBaseConnection
+{
+private:
+    std::shared_ptr<k_api::TransportClientTcp> mTransportClientTcp;
+    std::shared_ptr<k_api::RouterClient> mRouterTcp;
+    std::shared_ptr<k_api::TransportClientUdp> mTransportClientUdp;
+    std::shared_ptr<k_api::RouterClient> mRouterUdp;
+    std::shared_ptr<k_api::SessionManager> mSessionManagerTcp;
+    std::shared_ptr<k_api::SessionManager> mSessionManagerUdp;
+
+public:
+    std::shared_ptr<k_api::Base::BaseClient> mBaseClient;
+    std::shared_ptr<k_api::BaseCyclic::BaseCyclicClient> mBaseCyclicClient;
+    std::shared_ptr<k_api::ActuatorConfig::ActuatorConfigClient> mActuatorConfigClient;
+
+    KinovaBaseConnection(std::string, uint32_t, uint32_t, std::string, std::string);
+    ~KinovaBaseConnection();
+};
+
+void move_to_home_position(k_api::Base::BaseClient* pBase, uint32_t pTimeoutSec = 20);
+
+#endif  // _KINOVA_UTIL_H

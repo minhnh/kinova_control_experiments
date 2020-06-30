@@ -1,44 +1,6 @@
 /*
-* KINOVA (R) KORTEX (TM)
+* Copyright (c) 2020 Minh Nguyen inc. All rights reserved.
 *
-* Copyright (c) 2019 Kinova inc. All rights reserved.
-*
-* This software may be modified and distributed
-* under the terms of the BSD 3-Clause license.
-*
-* Refer to the LICENSE file for details.
-*
-*/
-
-/*
-* DESCRIPTION OF CURRENT EXAMPLE:
-* ===============================
-* This example works as a simili-haptic demo.
-*     
-* The last actuator, the small one holding the interconnect, acts as a torque sensing device commanding the first actuator.
-* The first actuator, the big one on the base, is controlled in torque and its position is sent as a command to the last one.
-* 
-* The script can be launched through command line with python3: python torqueControl_example.py
-* The PC should be connected through ethernet with the arm. Default IP address 192.168.1.10 is used as arm address.
-* 
-* 1- Connection with the base:
-*     1- A TCP session is started on port 10000 for most API calls. Refresh is at 25ms on this port.
-*     2- A UDP session is started on port 10001 for BaseCyclic calls. Refresh is at 1ms on this port only.
-* 2- Initialization
-*     1- First frame is built based on arm feedback to ensure continuity
-*     2- First actuator torque command is set as well
-*     3- Base is set in low-level servoing
-*     4- First frame is sent
-*     3- First actuator is switched to torque mode
-* 3- Cyclic thread is running at 1ms
-*     1- Torque command to first actuator is set to a multiple of last actuator torque measure minus its initial value to
-*        avoid an initial offset error
-*     2- Position command to last actuator equals first actuator position minus initial delta
-*     
-* 4- On keyboard interrupt, example stops
-*     1- Cyclic thread is stopped
-*     2- First actuator is set back to position control
-*     3- Base is set in single level servoing (default)
 */
 
 #include <iostream>
@@ -48,26 +10,12 @@
 #include <stdlib.h> /* abs */
 #include <chrono>
 #include <time.h>
-#include <KDetailedException.h>
 
-#include <BaseClientRpc.h>
-#include <BaseCyclicClientRpc.h>
-#include <ActuatorConfigClientRpc.h>
-#include <SessionClientRpc.h>
-#include <SessionManager.h>
-
-#include <RouterClient.h>
-#include <TransportClientUdp.h>
-#include <TransportClientTcp.h>
+#include "kinova_util.h"
 
 #include <google/protobuf/util/json_util.h>
 
-#if defined(_MSC_VER)
-#include <Windows.h>
-#else
 #include <unistd.h>
-#endif
-#include <time.h>
 
 namespace k_api = Kinova::Api;
 const int SECOND = 1000000;
@@ -82,31 +30,8 @@ const int SECOND = 1000000;
 
 float TIME_DURATION = 30.0f; // Duration of the example (seconds)
 
-// Maximum allowed waiting time during actions
-// Maximum allowed waiting time during actions
-constexpr auto TIMEOUT_PROMISE_DURATION = std::chrono::seconds{20};
 std::chrono::steady_clock::time_point loop_start_time;
 std::chrono::duration <double, std::micro> loop_interval{};
-
-/*****************************
- * Example related function *
- *****************************/
-int64_t GetTickUs()
-{
-#if defined(_MSC_VER)
-    LARGE_INTEGER start, frequency;
-
-    QueryPerformanceFrequency(&frequency);
-    QueryPerformanceCounter(&start);
- 
-    return (start.QuadPart * 1000000) / frequency.QuadPart;
-#else
-    struct timespec start;
-    clock_gettime(CLOCK_MONOTONIC, &start);
-
-    return (start.tv_sec * 1000000LLU) + (start.tv_nsec / 1000);
-#endif
-}
 
 //Make sure that the control loop runs exactly with the specified frequency
 int enforce_loop_frequency(const int dt)
@@ -121,82 +46,6 @@ int enforce_loop_frequency(const int dt)
         return 0;
     }
     else return -1; //Loop is too slow
-}
-
-// Create an event listener that will set the promise action event to the exit value
-// Will set promise to either END or ABORT
-// Use finish_promise.get_future.get() to wait and get the value
-std::function<void(k_api::Base::ActionNotification)> 
-    create_event_listener_by_promise(std::promise<k_api::Base::ActionEvent>& finish_promise)
-{
-    return [&finish_promise] (k_api::Base::ActionNotification notification)
-    {
-        const auto action_event = notification.action_event();
-        switch(action_event)
-        {
-        case k_api::Base::ActionEvent::ACTION_END:
-        case k_api::Base::ActionEvent::ACTION_ABORT:
-            finish_promise.set_value(action_event);
-            break;
-        default:
-            break;
-        }
-    };
-}
-
-/**************************
- * Example core functions *
- **************************/
-void example_move_to_home_position(k_api::Base::BaseClient* base)
-{
-    // Make sure the arm is in Single Level Servoing before executing an Action
-    auto servoingMode = k_api::Base::ServoingModeInformation();
-    servoingMode.set_servoing_mode(k_api::Base::ServoingMode::SINGLE_LEVEL_SERVOING);
-    base->SetServoingMode(servoingMode);
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
-
-    // Move arm to ready position
-    std::cout << "Moving the arm to a safe position" << std::endl;
-    auto action_type = k_api::Base::RequestedActionType();
-    action_type.set_action_type(k_api::Base::REACH_JOINT_ANGLES);
-    auto action_list = base->ReadAllActions(action_type);
-    auto action_handle = k_api::Base::ActionHandle();
-    action_handle.set_identifier(0);
-    for (auto action : action_list.action_list()) 
-    {
-        if (action.name() == "Home") 
-        {
-            action_handle = action.handle();
-        }
-    }
-
-    if (action_handle.identifier() == 0) 
-    {
-        std::cout << "Can't reach safe position, exiting" << std::endl;
-    } 
-    else 
-    {
-        // Connect to notification action topic
-        std::promise<k_api::Base::ActionEvent> finish_promise;
-        auto finish_future = finish_promise.get_future();
-        auto promise_notification_handle = base->OnNotificationActionTopic(
-            create_event_listener_by_promise(finish_promise),
-            k_api::Common::NotificationOptions()
-        );
-
-        // Execute action
-        base->ExecuteActionFromReference(action_handle);
-
-        // Wait for future value from promise
-        const auto status = finish_future.wait_for(TIMEOUT_PROMISE_DURATION);
-        base->Unsubscribe(promise_notification_handle);
-
-        if(status != std::future_status::ready)
-        {
-            std::cout << "Timeout on action notification wait" << std::endl;
-        }
-        const auto promise_event = finish_future.get();
-    }
 }
 
 bool example_cyclic_torque_control(k_api::Base::BaseClient* base, k_api::BaseCyclic::BaseCyclicClient* base_cyclic, k_api::ActuatorConfig::ActuatorConfigClient* actuator_config)
@@ -241,7 +90,7 @@ bool example_cyclic_torque_control(k_api::Base::BaseClient* base, k_api::BaseCyc
 
         // Send a first frame
         base_feedback = base_cyclic->Refresh(base_command);
-        
+
         // Set last actuator in torque mode now that the command is equal to measure
         auto control_mode_message = k_api::ActuatorConfig::ControlModeInformation();
         control_mode_message.set_control_mode(k_api::ActuatorConfig::ControlMode::TORQUE);
@@ -334,7 +183,7 @@ bool example_cyclic_torque_control(k_api::Base::BaseClient* base, k_api::BaseCyc
 
         std::cout << "Torque control example completed" << std::endl;
 
-        // Set first actuator back in position 
+        // Set first actuator back in position
         control_mode_message.set_control_mode(k_api::ActuatorConfig::ControlMode::POSITION);
         actuator_config->SetControlMode(control_mode_message, last_actuator_device_id);
 
@@ -351,7 +200,7 @@ bool example_cyclic_torque_control(k_api::Base::BaseClient* base, k_api::BaseCyc
         std::cout << "Error: " << ex2.what() << std::endl;
         return_status = false;
     }
-    
+
     // Set the servoing mode back to Single Level
     servoing_mode.set_servoing_mode(k_api::Base::ServoingMode::SINGLE_LEVEL_SERVOING);
     base->SetServoingMode(servoing_mode);
@@ -364,65 +213,13 @@ bool example_cyclic_torque_control(k_api::Base::BaseClient* base, k_api::BaseCyc
 
 int main(int argc, char **argv)
 {
-    // Create API objects
-    auto error_callback = [](k_api::KError err){ cout << "_________ callback error _________" << err.toString(); };
-    
-    std::cout << "Creating transport objects" << std::endl;
-    auto transport = new k_api::TransportClientTcp();
-    auto router = new k_api::RouterClient(transport, error_callback);
-    transport->connect(IP_ADDRESS, PORT);
-
-    std::cout << "Creating transport real time objects" << std::endl;
-    auto transport_real_time = new k_api::TransportClientUdp();
-    auto router_real_time = new k_api::RouterClient(transport_real_time, error_callback);
-    transport_real_time->connect(IP_ADDRESS, PORT_REAL_TIME);
-
-    // Set session data connection information
-    auto create_session_info = k_api::Session::CreateSessionInfo();
-    create_session_info.set_username("admin");
-    create_session_info.set_password("kinova1_area4251");
-    create_session_info.set_session_inactivity_timeout(60000);   // (milliseconds)
-    create_session_info.set_connection_inactivity_timeout(2000); // (milliseconds)
-
-    // Session manager service wrapper
-    std::cout << "Creating sessions for communication" << std::endl;
-    auto session_manager = new k_api::SessionManager(router);
-    session_manager->CreateSession(create_session_info);
-    auto session_manager_real_time = new k_api::SessionManager(router_real_time);
-    session_manager_real_time->CreateSession(create_session_info);
-    std::cout << "Sessions created" << std::endl;
-
-    // Create services
-    auto base = new k_api::Base::BaseClient(router);
-    auto base_cyclic = new k_api::BaseCyclic::BaseCyclicClient(router_real_time);
-    auto actuator_config = new k_api::ActuatorConfig::ActuatorConfigClient(router);
+    KinovaBaseConnection connection(IP_ADDRESS, PORT, PORT_REAL_TIME, "admin", "kinova1_area4251");
 
     // Example core
-    example_move_to_home_position(base);
-    auto isOk = example_cyclic_torque_control(base, base_cyclic, actuator_config);
+    move_to_home_position(connection.mBaseClient.get());
+    auto isOk = example_cyclic_torque_control(connection.mBaseClient.get(), connection.mBaseCyclicClient.get(), connection.mActuatorConfigClient.get());
     if (!isOk)
     {
         std::cout << "There has been an unexpected error in example_cyclic_torque_control() function." << endl;;
     }
-
-    // Close API session
-    session_manager->CloseSession();
-    session_manager_real_time->CloseSession();
-
-    // Deactivate the router and cleanly disconnect from the transport object
-    router->SetActivationStatus(false);
-    transport->disconnect();
-    router_real_time->SetActivationStatus(false);
-    transport_real_time->disconnect();
-
-    // Destroy the API
-    delete base;
-    delete base_cyclic;
-    delete actuator_config;
-    delete session_manager;
-    delete session_manager_real_time;
-    delete router;
-    delete router_real_time;
-    delete transport;
-    delete transport_real_time;
 }
