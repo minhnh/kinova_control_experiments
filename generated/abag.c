@@ -2,6 +2,7 @@
 
 /* functions to initialize structs of DataBlockContainer's */
 void initialize_abagState(abagState_t * abagState) {
+  abagState->eBarDelay[0] = 0.0L;
   abagState->delayIndex_access = 0;
   abagState->gain_access = 0.0L;
   abagState->bias_access = 0.0L;
