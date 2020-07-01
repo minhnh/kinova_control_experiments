@@ -14,6 +14,7 @@
 #include <TransportClientTcp.h>
 
 namespace k_api = Kinova::Api;
+namespace sc = std::chrono;
 
 class KinovaBaseConnection
 {
@@ -35,5 +36,9 @@ public:
 };
 
 void move_to_home_position(k_api::Base::BaseClient* pBase, uint32_t pTimeoutSec = 20);
+
+void handleKinovaException(k_api::KDetailedException& ex);
+
+bool waitMicroSeconds(const sc::time_point<sc::steady_clock> &pStartTime, const sc::microseconds &pDuration);
 
 #endif  // _KINOVA_UTIL_H

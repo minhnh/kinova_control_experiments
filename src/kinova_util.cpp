@@ -132,3 +132,21 @@ void move_to_home_position(k_api::Base::BaseClient* base, uint32_t pTimeoutSec)
         const auto promise_event = finish_future.get();
     }
 }
+
+void handleKinovaException(k_api::KDetailedException& ex) {
+    std::cerr << "Kortex exception: " << ex.what() << std::endl;
+    std::cerr << "Error sub-code: "
+              << k_api::SubErrorCodes_Name(k_api::SubErrorCodes(ex.getErrorInfo().getError().error_sub_code()))
+              << std::endl;
+}
+
+bool waitMicroSeconds(const sc::time_point<sc::steady_clock> &pStartTime, const sc::microseconds &pDuration)
+{
+    auto now = sc::steady_clock::now();
+    if (now - pStartTime > pDuration) return false;
+
+    do {
+        now = sc::steady_clock::now();
+    } while (now - pStartTime < pDuration);
+    return true;
+}
