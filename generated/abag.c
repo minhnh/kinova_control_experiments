@@ -1,15 +1,30 @@
 #include "abag.h"
 
+/* functions to initialize structs of DataBlockContainer's */
+void initialize_abagState(abagState_t * abagState) {
+  abagState->delayIndex_access = 0;
+  abagState->gain_access = 0.0L;
+  abagState->bias_access = 0.0L;
+  abagState->signedErr_access = 0.0L;
+  abagState->eBar_access = 0.0L;
+}
+
 /* definitions of contained functions and schedules */
 void fb_sched(double const * error_sign, double * actuation, double const * gain, double const * bias) {
   /* data block declarations */
-  double gainedErrSgn_ge_sgn;
+  double gainedErrSgn_ge_sgn = 0.0L;
+  double actuation_access = 0.0L;
 
   /* fixed data flow schedule */
   gainedErrSgn_ge_sgn = (*gain) * (*error_sign);
-  *actuation = +(*bias) + (gainedErrSgn_ge_sgn);
+  actuation_access = +(*bias) + (gainedErrSgn_ge_sgn);
+
+  /* saturation saturate_actuation */
+  if      (actuation_access > 1.0) actuation_access = 1.0;
+  else if (actuation_access < -1.0) actuation_access = -1.0;
 
   /* update output ports */
+  *actuation = actuation_access;
 }
 
 void errSign(double const * input, double * output) {
@@ -29,8 +44,8 @@ void delayEbar(double const * input, int * rearIndex, double delay[]) {
 
 void biasAdapter_sched(double const * e_bar, double const * bias_threshold, double const * bias_step, double * adapted_bias) {
   /* data block declarations */
-  double decision_access;
-  double bias_step_access;
+  double decision_access = 0.0L;
+  double bias_step_access = 0.0L;
 
   /* fixed data flow schedule */
 
@@ -46,14 +61,13 @@ void biasAdapter_sched(double const * e_bar, double const * bias_threshold, doub
   if      (*adapted_bias > 1.) *adapted_bias = 1.;
   else if (*adapted_bias < -1.) *adapted_bias = -1.;
 
-
   /* update output ports */
 }
 
 void gainAdapater_sched(double const * e_bar, double const * gain_threshold, double const * gain_step, double * adapted_gain) {
   /* data block declarations */
-  double decision_access;
-  double gain_step_access;
+  double decision_access = 0.0L;
+  double gain_step_access = 0.0L;
 
   /* fixed data flow schedule */
 
@@ -68,7 +82,6 @@ void gainAdapater_sched(double const * e_bar, double const * gain_threshold, dou
   /* saturation saturateGain */
   if      (*adapted_gain > 1.) *adapted_gain = 1.;
   else if (*adapted_gain < -1.) *adapted_gain = -1.;
-
 
   /* update output ports */
 }

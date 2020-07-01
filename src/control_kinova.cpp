@@ -108,6 +108,7 @@ bool example_cyclic_torque_control (
         double error = 0.0;
         double abag_command = 0.0;
         abagState_t abagState;
+        initialize_abagState(&abagState);
         FILE * fp = fopen("simulated_data.csv", "w+");
         fprintf(fp, "error, signed, bias, gain, e_bar, e_bar_prev, actuation, currentVel\n");
 

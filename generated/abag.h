@@ -16,6 +16,7 @@ typedef struct abagState_st {
   double signedErr_access;
   double eBar_access;
 } abagState_t;
+void initialize_abagState(abagState_t *);
 
 
 /* declarations of contained functions and schedules */
