@@ -149,7 +149,7 @@ void loadUrdfModel(const std::string &pUrdfPath, KDL::Tree &pKinovaTree, KDL::Ch
     }
 
     // Extract KDL chain from KDL tree
-    pKinovaTree.getChain(constants::kinova::FRAME_JOINT_0, constants::kinova::FRAME_JOINT_6, pKinovaChain);
+    pKinovaTree.getChain(constants::kinova::FRAME_JOINT_0, constants::kinova::FRAME_END_EFFECTOR, pKinovaChain);
 }
 
 void handleKinovaException(k_api::KDetailedException& ex) {

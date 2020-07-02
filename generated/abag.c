@@ -91,10 +91,10 @@ void gainAdapater_sched(double const * e_bar, double const * gain_threshold, dou
 /* definitions of root schedules */
 void abag_sched(abagState_t * abagState, double const * error, double * actuation, double const * alpha) {
   /* data block declarations */
-  const double bias_threshold_xi = 0.000457;
-  const double bias_step_delta = 0.000500;
-  const double gain_threshold_xi = 0.602492;
-  const double gain_step_delta = 0.003552;
+  const double bias_threshold_xi = 0.000407;
+  const double bias_step_delta = 0.000400;
+  const double gain_threshold_xi = 0.502492;
+  const double gain_step_delta = 0.002;
 
   /* fixed data flow schedule */
   errSign(error, &(abagState->signedErr_access));
