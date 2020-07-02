@@ -3,6 +3,7 @@
 
 #include <string>
 #include <memory>
+#include <fstream>
 
 #include <kdl_parser/kdl_parser.hpp>
 
@@ -14,6 +15,8 @@
 #include <RouterClient.h>
 #include <TransportClientUdp.h>
 #include <TransportClientTcp.h>
+
+#include "abag.h"
 
 namespace k_api = Kinova::Api;
 namespace sc = std::chrono;
@@ -44,5 +47,9 @@ void move_to_home_position(k_api::Base::BaseClient* pBase, uint32_t pTimeoutSec 
 void handleKinovaException(k_api::KDetailedException& ex);
 
 bool waitMicroSeconds(const sc::time_point<sc::steady_clock> &pStartTime, const sc::microseconds &pDuration);
+
+void writeDataRow(
+    std::ofstream &pFileStream, const abagState_t &pState, double &pError, double &pCommand, double &pMeasured
+);
 
 #endif  // _KINOVA_UTIL_H

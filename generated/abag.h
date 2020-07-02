@@ -28,7 +28,7 @@ void biasAdapter_sched(double const * e_bar, double const * bias_threshold, doub
 void gainAdapater_sched(double const * e_bar, double const * gain_threshold, double const * gain_step, double * adapted_gain);
 
 /* declarations of root schedules */
-void abag_sched(abagState_t * abagState, double const * error, double * actuation, double const * alpha);
+void abag_sched(abagState_t * abagState, double const * error, double * actuation, double const * alpha, double const * biasThreshold, double const * biasStep, double const * gainThreshold, double const * gainStep);
 
 #ifdef __cplusplus
 }

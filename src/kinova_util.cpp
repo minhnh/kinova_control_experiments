@@ -169,3 +169,15 @@ bool waitMicroSeconds(const sc::time_point<sc::steady_clock> &pStartTime, const 
     } while (now - pStartTime < pDuration);
     return true;
 }
+
+void writeDataRow(
+    std::ofstream &pFileStream, const abagState_t &pState, double &pError, double &pCommand, double &pMeasured
+) {
+    pFileStream << pError << ","
+                << pState.signedErr_access << ","
+                << pState.bias_access << ","
+                << pState.gain_access << ","
+                << pState.eBar_access << ","
+                << pCommand << ","
+                << pMeasured << std::endl;
+}

@@ -2,6 +2,7 @@
 * Copyright (c) 2020 Minh Nguyen inc. All rights reserved.
 *
 */
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -102,29 +103,25 @@ void example_cyclic_torque_control (
     auto control_mode_message = k_api::ActuatorConfig::ControlModeInformation();
     control_mode_message.set_control_mode(k_api::ActuatorConfig::ControlMode::TORQUE);
 
-    // int last_actuator_device_id = 7;
-    // actuator_config->SetControlMode(control_mode_message, last_actuator_device_id);
     for (int actuator_id = 1; actuator_id < ACTUATOR_COUNT + 1; actuator_id++)
         actuator_config->SetControlMode(control_mode_message, actuator_id);
 
-
     const std::vector<double> joint_torque_limits {39.0, 39.0, 39.0, 39.0, 9.0, 9.0, 9.0};
     const std::vector<double> cart_force_limit {5.0, 5.0, 5.0, 5.0, 5.0, 5.0}; // N
-    const double alpha = 0.75;
-    double desired_vel = 6.0, current_vel = 0.0; //deg/s
-    double desiredPosX = 0.0, desiredPosY = 0.0, desiredPosZ = 0.0;
-    double errorX = 0.0, errorY = 0.0, errorZ = 0.0;
-    double abagCommandX = 0.0, abagCommandY = 0.0, abagCommandZ = 0.0;
 
-    abagState_t abagStateX;
-    initialize_abagState(&abagStateX);
-    abagState_t abagStateY;
-    initialize_abagState(&abagStateY);
-    abagState_t abagStateZ;
-    initialize_abagState(&abagStateZ);
-
-    FILE * fp = fopen("simulated_data.csv", "w+");
-    fprintf(fp, "error, signed, bias, gain, e_bar, e_bar_prev, actuation, currentVel\n");
+    // ABAG parameters
+    const double alphaPosition[3] = { 0.75 };
+    const double biasThresPos[3] = {0.000407, 0.000407, 0.000407};
+    const double biasStepPos[3] = {0.000400, 0.000400, 0.000400};
+    const double gainThresPos[3] = {0.502492, 0.502492, 0.502492};
+    const double gainStepPos[3] = {0.002};
+    double desiredPosistion[3] = { 0.0 };
+    double errorPos[3] = { 0.0 };
+    double commandPos[3] = { 0.0 };
+    abagState_t abagStatePos[3];
+    for (int i = 0; i < 3; i++) {
+        initialize_abagState(&abagStatePos[i]);
+    }
 
     // Real-time loop
     const int SECOND_IN_MICROSECONDS = 1000000;
@@ -138,6 +135,16 @@ void example_cyclic_torque_control (
     sc::time_point<sc::steady_clock> controlStartTime = sc::steady_clock::now();;
     sc::time_point<sc::steady_clock> loopStartTime;
     sc::duration<int64_t, nano> totalElapsedTime;
+
+
+    // open log file streams
+    std::ofstream logPosX, logPosY, logPosZ;
+    logPosX.open("ctrl_data_pos_x.csv", std::ofstream::out | std::ofstream::trunc);
+    logPosY.open("ctrl_data_pos_y.csv", std::ofstream::out | std::ofstream::trunc);
+    logPosZ.open("ctrl_data_pos_z.csv", std::ofstream::out | std::ofstream::trunc);
+    logPosX << "error, signed, bias, gain, e_bar, command, measured" << std::endl;
+    logPosY << "error, signed, bias, gain, e_bar, command, measured" << std::endl;
+    logPosZ << "error, signed, bias, gain, e_bar, command, measured" << std::endl;
     while (loopStartTime - controlStartTime < TASK_TIME_LIMIT_MICRO)
     {
         iterationCount++;
@@ -150,7 +157,7 @@ void example_cyclic_torque_control (
         }
         catch(...)
         {
-            if (fp != nullptr) fclose(fp);
+            logPosX.close(); logPosY.close(); logPosZ.close();
             std::cerr << "error reading sensors" << std::endl;
             throw;
         }
@@ -189,23 +196,27 @@ void example_cyclic_torque_control (
 
         if (iterationCount == 1)
         {
-            desiredPosX = endEffPose.p(0) + 0.03;
-            desiredPosY = endEffPose.p(1) + 0.03;
-            desiredPosZ = endEffPose.p(2) + 0.03;
-            std::cout << "desired: " << desiredPosX << ", " << desiredPosY << ", " << desiredPosZ << std::endl;
+            desiredPosistion[0] = endEffPose.p(0) + 0.03;
+            desiredPosistion[1] = endEffPose.p(1) + 0.03;
+            desiredPosistion[2] = endEffPose.p(2) + 0.03;
+            std::cout << "desired position: x=" << desiredPosistion[0]
+                      << ", y=" << desiredPosistion[1] << ", z=" << desiredPosistion[2] << std::endl;
         }
 
-        errorX = desiredPosX - endEffPose.p(0);
-        errorY = desiredPosY - endEffPose.p(1);
-        errorZ = desiredPosZ - endEffPose.p(2);
+        errorPos[0] = desiredPosistion[0] - endEffPose.p(0);
+        errorPos[1] = desiredPosistion[1] - endEffPose.p(1);
+        errorPos[2] = desiredPosistion[2] - endEffPose.p(2);
 
-        abag_sched(&abagStateX, &errorX, &abagCommandX, &alpha);
-        abag_sched(&abagStateY, &errorY, &abagCommandY, &alpha);
-        abag_sched(&abagStateZ, &errorZ, &abagCommandZ, &alpha);
+        abag_sched(&abagStatePos[0], &errorPos[0], &commandPos[0], &alphaPosition[0],
+                   &biasThresPos[0], &biasStepPos[0], &gainThresPos[0], &gainStepPos[0]);
+        abag_sched(&abagStatePos[1], &errorPos[1], &commandPos[1], &alphaPosition[1],
+                   &biasThresPos[1], &biasStepPos[1], &gainThresPos[1], &gainStepPos[1]);
+        abag_sched(&abagStatePos[2], &errorPos[2], &commandPos[2], &alphaPosition[2],
+                   &biasThresPos[2], &biasStepPos[2], &gainThresPos[2], &gainStepPos[2]);
 
-        endEffForce(0) = abagCommandX * cart_force_limit[0];
-        endEffForce(1) = abagCommandY * cart_force_limit[1];
-        endEffForce(2) = abagCommandZ * cart_force_limit[2];
+        endEffForce(0) = commandPos[0] * cart_force_limit[0];
+        endEffForce(1) = commandPos[1] * cart_force_limit[1];
+        endEffForce(2) = commandPos[2] * cart_force_limit[2];
         // std::cout << end_eff_force.transpose() << std::endl;
 
         jntImpedanceTorques.data = jacobianEndEff.data.transpose() * endEffForce;
@@ -222,15 +233,9 @@ void example_cyclic_torque_control (
 
         // std::cout << jntCmdTorques.data.transpose() << std::endl;
         // control
-        // fprintf(fp, "%.5f, %.5f, %.5f, %.5f, %.5f, %.5f, %.5f\n",
-        //     errorX, abagStateX.signedErr_access, abagStateX.bias_access, abagStateX.gain_access, abagStateX.eBar_access,
-        //     abagCommandX, endEffPose.p(0));
-        // fprintf(fp, "%.5f, %.5f, %.5f, %.5f, %.5f, %.5f, %.5f\n",
-        //     errorY, abagStateY.signedErr_access, abagStateY.bias_access, abagStateY.gain_access, abagStateY.eBar_access,
-        //     abagCommandY, endEffPose.p(1));
-        fprintf(fp, "%.5f, %.5f, %.5f, %.5f, %.5f, %.5f, %.5f\n",
-            errorZ, abagStateZ.signedErr_access, abagStateZ.bias_access, abagStateZ.gain_access, abagStateZ.eBar_access,
-            abagCommandZ, endEffPose.p(2));
+        writeDataRow(logPosX, abagStatePos[0], errorPos[0], commandPos[0], endEffPose.p(0));
+        writeDataRow(logPosY, abagStatePos[1], errorPos[1], commandPos[1], endEffPose.p(1));
+        writeDataRow(logPosZ, abagStatePos[2], errorPos[2], commandPos[2], endEffPose.p(2));
         // abag_sched(&abagState, &error, &abag_command, &alpha);
 
         // base_command.mutable_actuators(6)->set_position(base_feedback.actuators(6).position());
@@ -251,7 +256,7 @@ void example_cyclic_torque_control (
         }
         catch(...)
         {
-            if (fp != nullptr) fclose(fp);
+            logPosX.close(); logPosY.close(); logPosZ.close();
             std::cerr << "error sending command" << std::endl;
             throw;
         }
@@ -260,7 +265,8 @@ void example_cyclic_torque_control (
         if (waitMicroSeconds(loopStartTime, LOOP_DURATION) != 0) slowLoopCount++;
     }
 
-    if (fp != nullptr) fclose(fp);
+    // close log files
+    logPosX.close(); logPosY.close(); logPosZ.close();
 
     std::cout << "Torque control example completed" << std::endl;
     std::cout << "Number of loops which took longer than specified duration: " << slowLoopCount << std::endl;
