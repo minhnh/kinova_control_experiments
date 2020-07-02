@@ -1,6 +1,8 @@
 #include <chrono>
+#include <urdf/model.h>
 #include <KDetailedException.h>
 #include "kinova_util.h"
+#include "constants.hpp"
 
 KinovaBaseConnection::KinovaBaseConnection (
     std::string pHost, uint32_t pTcpPort, uint32_t pUdpPort, std::string pUsername, std::string pPassword
@@ -131,6 +133,23 @@ void move_to_home_position(k_api::Base::BaseClient* base, uint32_t pTimeoutSec)
         }
         const auto promise_event = finish_future.get();
     }
+}
+
+void loadUrdfModel(const std::string &pUrdfPath, KDL::Tree &pKinovaTree, KDL::Chain &pKinovaChain) {
+    urdf::Model kinovaModel;
+    if (!kinovaModel.initFile(pUrdfPath))
+    {
+        throw std::runtime_error("Failed to parse urdf robot model from: " + pUrdfPath);
+    }
+
+    // Extract KDL tree from the URDF file
+    if (!kdl_parser::treeFromUrdfModel(kinovaModel, pKinovaTree))
+    {
+        throw std::runtime_error("Failed to construct kdl tree from URDF model");
+    }
+
+    // Extract KDL chain from KDL tree
+    pKinovaTree.getChain(constants::kinova::FRAME_JOINT_0, constants::kinova::FRAME_JOINT_6, pKinovaChain);
 }
 
 void handleKinovaException(k_api::KDetailedException& ex) {

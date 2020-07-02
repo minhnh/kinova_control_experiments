@@ -4,6 +4,8 @@
 #include <string>
 #include <memory>
 
+#include <kdl_parser/kdl_parser.hpp>
+
 #include <BaseClientRpc.h>
 #include <BaseCyclicClientRpc.h>
 #include <ActuatorConfigClientRpc.h>
@@ -34,6 +36,8 @@ public:
     KinovaBaseConnection(std::string, uint32_t, uint32_t, std::string, std::string);
     ~KinovaBaseConnection();
 };
+
+void loadUrdfModel(const std::string &pUrdfPath, KDL::Tree &pKinovaTree, KDL::Chain &pKinovaChain);
 
 void move_to_home_position(k_api::Base::BaseClient* pBase, uint32_t pTimeoutSec = 20);
 

@@ -2,7 +2,6 @@
 * Copyright (c) 2020 Minh Nguyen inc. All rights reserved.
 *
 */
-
 #include <iostream>
 #include <string>
 #include <vector>
@@ -13,8 +12,11 @@
 
 #include "kinova_util.h"
 #include "abag.h"
+#include "constants.hpp"
 
 #include <unistd.h>
+
+#define REPO_DIR "/home/minh/workspace/kinova_control_experiments/"
 
 namespace k_api = Kinova::Api;
 namespace sc = std::chrono;
@@ -35,6 +37,11 @@ void example_cyclic_torque_control (
     k_api::ActuatorConfig::ActuatorConfigClient* actuator_config
 )
 {
+    const std::string UrdfPath = REPO_DIR + constants::kinova::URDF_PATH;
+    std::cout << "loading URDF file at: " << UrdfPath << std::endl;
+    KDL::Tree kinovaTree; KDL::Chain kinovaChain;
+    loadUrdfModel(UrdfPath, kinovaTree, kinovaChain);
+
     // Clearing faults
     try
     {
