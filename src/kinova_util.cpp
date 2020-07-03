@@ -154,9 +154,12 @@ void loadUrdfModel(const std::string &pUrdfPath, KDL::Tree &pKinovaTree, KDL::Ch
 
 void handleKinovaException(k_api::KDetailedException& ex) {
     std::cerr << "Kortex exception: " << ex.what() << std::endl;
-    std::cerr << "Error sub-code: "
-              << k_api::SubErrorCodes_Name(k_api::SubErrorCodes(ex.getErrorInfo().getError().error_sub_code()))
-              << std::endl;
+    auto errorCode = ex.getErrorInfo().getError().error_code();
+    auto errorSubCode = ex.getErrorInfo().getError().error_sub_code();
+    std::cerr << "Error code '" << errorCode << "' : "
+              << Kinova::Api::ErrorCodes_Name(Kinova::Api::ErrorCodes(errorCode)) << std::endl;
+    std::cerr << "Error sub-code '" << errorSubCode << "' : "
+              << Kinova::Api::SubErrorCodes_Name(Kinova::Api::SubErrorCodes(errorSubCode)) << std::endl;
 }
 
 bool waitMicroSeconds(const sc::time_point<sc::steady_clock> &pStartTime, const sc::microseconds &pDuration)
@@ -171,13 +174,22 @@ bool waitMicroSeconds(const sc::time_point<sc::steady_clock> &pStartTime, const 
 }
 
 void writeDataRow(
-    std::ofstream &pFileStream, const abagState_t &pState, double &pError, double &pCommand, double &pMeasured
+    std::ofstream &pFileStream, const abagState_t &pState,
+    long pTime, double &pError, double &pCommand, double &pMeasured
 ) {
-    pFileStream << pError << ","
+    pFileStream << pTime << ","
+                << pError << ","
                 << pState.signedErr_access << ","
                 << pState.bias_access << ","
                 << pState.gain_access << ","
                 << pState.eBar_access << ","
                 << pCommand << ","
                 << pMeasured << std::endl;
+}
+
+void stopRobot(k_api::ActuatorConfig::ActuatorConfigClient* actuator_config) {
+    auto control_mode_message = k_api::ActuatorConfig::ControlModeInformation();
+    control_mode_message.set_control_mode(k_api::ActuatorConfig::ControlMode::POSITION);
+    for (int actuator_id = 1; actuator_id < ACTUATOR_COUNT + 1; actuator_id++)
+        actuator_config->SetControlMode(control_mode_message, actuator_id);
 }

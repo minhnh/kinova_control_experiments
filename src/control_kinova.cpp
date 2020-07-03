@@ -10,6 +10,7 @@
 #include <stdlib.h> /* abs */
 #include <chrono>
 #include <time.h>
+#include <unistd.h>
 
 #include <kdl/chainjnttojacsolver.hpp>
 #include <kdl/chainidsolver_recursive_newton_euler.hpp>
@@ -19,21 +20,14 @@
 #include "abag.h"
 #include "constants.hpp"
 
-#include <unistd.h>
-
 #define REPO_DIR "/home/minh/workspace/kinova_control_experiments/"
 
 namespace k_api = Kinova::Api;
 namespace sc = std::chrono;
 
 #define IP_ADDRESS "192.168.1.10"
-
 #define PORT 10000
 #define PORT_REAL_TIME 10001
-#define PI 3.14159265358979323846
-#define DEG_TO_RAD(x) (x) * PI / 180.0
-#define RAD_TO_DEG(x) (x) * 180.0 / PI
-#define ACTUATOR_COUNT 7
 
 std::chrono::duration <double, std::micro> loop_interval{};
 
@@ -48,7 +42,7 @@ void example_cyclic_torque_control (
     KDL::Tree kinovaTree; KDL::Chain kinovaChain;
     loadUrdfModel(UrdfPath, kinovaTree, kinovaChain);
     // Initialize solvers
-    const KDL::JntArray ZERO_ACCEL_ARRAY(7);
+    const KDL::JntArray ZERO_ARRAY(7);
     const KDL::Wrenches ZERO_WRENCHES(kinovaChain.getNrOfSegments(), KDL::Wrench::Zero());
 
     KDL::Jacobian jacobianEndEff(kinovaChain.getNrOfJoints());
@@ -57,8 +51,8 @@ void example_cyclic_torque_control (
     endEffForce.setZero();
 
     int returnFlag = 0;
-    KDL::ChainJntToJacSolver jacob_solver(kinovaChain);
-    KDL::ChainFkSolverPos_recursive fk_solver_pos(kinovaChain);
+    KDL::ChainJntToJacSolver jacobSolver(kinovaChain);
+    KDL::ChainFkSolverPos_recursive fkSolverPos(kinovaChain);
     std::shared_ptr<KDL::ChainIdSolver_RNE> idSolver = std::make_shared<KDL::ChainIdSolver_RNE>(kinovaChain,
         KDL::Vector(0.0, 0.0, -9.81289));
 
@@ -110,11 +104,11 @@ void example_cyclic_torque_control (
     const std::vector<double> cart_force_limit {5.0, 5.0, 5.0, 5.0, 5.0, 5.0}; // N
 
     // ABAG parameters
-    const double alphaPosition[3] = { 0.75 };
-    const double biasThresPos[3] = {0.000407, 0.000407, 0.000407};
-    const double biasStepPos[3] = {0.000400, 0.000400, 0.000400};
-    const double gainThresPos[3] = {0.502492, 0.502492, 0.502492};
-    const double gainStepPos[3] = {0.002};
+    const double alphaPosition[3] = { 0.75, 0.75, 0.75 };
+    const double biasThresPos[3] = { 0.000407, 0.000407, 0.000407 };
+    const double biasStepPos[3] = { 0.000400, 0.000400, 0.000400 };
+    const double gainThresPos[3] = { 0.502492, 0.502492, 0.502492 };
+    const double gainStepPos[3] = { 0.002, 0.002, 0.002 };
     double desiredPosistion[3] = { 0.0 };
     double errorPos[3] = { 0.0 };
     double commandPos[3] = { 0.0 };
@@ -133,19 +127,21 @@ void example_cyclic_torque_control (
     int iterationCount = 0;
     int slowLoopCount = 0;
     sc::time_point<sc::steady_clock> controlStartTime = sc::steady_clock::now();;
-    sc::time_point<sc::steady_clock> loopStartTime;
-    sc::duration<int64_t, nano> totalElapsedTime;
-
+    sc::time_point<sc::steady_clock> loopStartTime = sc::steady_clock::now();;
+    sc::duration<int64_t, nano> totalElapsedTime = loopStartTime - controlStartTime;
 
     // open log file streams
+    std::ofstream desiredPositionLog;
+    desiredPositionLog.open("desired_values.csv", std::ofstream::out | std::ofstream::trunc);
+    desiredPositionLog << "position X, position Y, position Z" << std::endl;
     std::ofstream logPosX, logPosY, logPosZ;
     logPosX.open("ctrl_data_pos_x.csv", std::ofstream::out | std::ofstream::trunc);
     logPosY.open("ctrl_data_pos_y.csv", std::ofstream::out | std::ofstream::trunc);
     logPosZ.open("ctrl_data_pos_z.csv", std::ofstream::out | std::ofstream::trunc);
-    logPosX << "error, signed, bias, gain, e_bar, command, measured" << std::endl;
-    logPosY << "error, signed, bias, gain, e_bar, command, measured" << std::endl;
-    logPosZ << "error, signed, bias, gain, e_bar, command, measured" << std::endl;
-    while (loopStartTime - controlStartTime < TASK_TIME_LIMIT_MICRO)
+    logPosX << "time (ns), error, signed, bias, gain, e_bar, command x, meas pos x" << std::endl;
+    logPosY << "time (ns), error, signed, bias, gain, e_bar, command y, meas pos y" << std::endl;
+    logPosZ << "time (ns), error, signed, bias, gain, e_bar, command z, meas pos z" << std::endl;
+    while (totalElapsedTime < TASK_TIME_LIMIT_MICRO)
     {
         iterationCount++;
         loopStartTime = sc::steady_clock::now();
@@ -157,16 +153,19 @@ void example_cyclic_torque_control (
         }
         catch(...)
         {
-            logPosX.close(); logPosY.close(); logPosZ.close();
+            if (desiredPositionLog.is_open()) desiredPositionLog.close();
+            if (logPosX.is_open()) logPosX.close();
+            if (logPosY.is_open()) logPosY.close();
+            if (logPosZ.is_open()) logPosZ.close();
             std::cerr << "error reading sensors" << std::endl;
             throw;
         }
 
         for (int i = 0; i < ACTUATOR_COUNT; i++)
         {
-            jntPositions(i) = DEG_TO_RAD(base_feedback.actuators(i).position()); //deg
+            jntPositions(i) = DEG_TO_RAD(base_feedback.actuators(i).position()); // deg
             jntVelocities(i) = DEG_TO_RAD(base_feedback.actuators(i).velocity()); // deg
-            jnt_torque(i)   = base_feedback.actuators(i).torque(); //nm
+            jnt_torque(i)   = base_feedback.actuators(i).torque(); // nm
         }
 
         // Kinova API provides only positive angle values
@@ -176,19 +175,14 @@ void example_cyclic_torque_control (
         if (jntPositions(3) > DEG_TO_RAD(180.0)) jntPositions(3) = jntPositions(3) - DEG_TO_RAD(360.0);
         if (jntPositions(5) > DEG_TO_RAD(180.0)) jntPositions(5) = jntPositions(5) - DEG_TO_RAD(360.0);
 
-        // current_vel = base_feedback.actuators(6).velocity();
-        // if (totalElapsedTime > TASK_TIME_LIMIT_MICRO * 0.1 && totalElapsedTime < TASK_TIME_LIMIT_MICRO * 0.9) {
-        //     error = desired_vel - current_vel;
-        // } else {
-        //     error = 0.0 - current_vel;
-        // }
+        // gravity compensation (zero velocity, acceleration & external wrench)
+        returnFlag = idSolver->CartToJnt(jntPositions, ZERO_ARRAY, ZERO_ARRAY, ZERO_WRENCHES, jntCmdTorques);
+        if (returnFlag != 0) break;
 
-        // gravity compensation
-        returnFlag = idSolver->CartToJnt(jntPositions, ZERO_ACCEL_ARRAY, ZERO_ACCEL_ARRAY, ZERO_WRENCHES, jntCmdTorques);
+        // solve for end effector Jacobian and pose with respect to base frame
+        returnFlag = jacobSolver.JntToJac(jntPositions, jacobianEndEff);
         if (returnFlag != 0) break;
-        returnFlag = jacob_solver.JntToJac(jntPositions, jacobianEndEff);
-        if (returnFlag != 0) break;
-        returnFlag = fk_solver_pos.JntToCart(jntPositions, endEffPose);
+        returnFlag = fkSolverPos.JntToCart(jntPositions, endEffPose);
         if (returnFlag != 0) break;
 
         // returnFlag = fk_solver_vel.JntToCart(jntPositions, jnt_vel_, end_eff_twist);
@@ -199,8 +193,9 @@ void example_cyclic_torque_control (
             desiredPosistion[0] = endEffPose.p(0) + 0.03;
             desiredPosistion[1] = endEffPose.p(1) + 0.03;
             desiredPosistion[2] = endEffPose.p(2) + 0.03;
-            std::cout << "desired position: x=" << desiredPosistion[0]
-                      << ", y=" << desiredPosistion[1] << ", z=" << desiredPosistion[2] << std::endl;
+            desiredPositionLog << desiredPosistion[0] << "," << desiredPosistion[1] << ","
+                               << desiredPosistion[2] << std::endl;
+            if (desiredPositionLog.is_open()) desiredPositionLog.close();
         }
 
         errorPos[0] = desiredPosistion[0] - endEffPose.p(0);
@@ -233,15 +228,9 @@ void example_cyclic_torque_control (
 
         // std::cout << jntCmdTorques.data.transpose() << std::endl;
         // control
-        writeDataRow(logPosX, abagStatePos[0], errorPos[0], commandPos[0], endEffPose.p(0));
-        writeDataRow(logPosY, abagStatePos[1], errorPos[1], commandPos[1], endEffPose.p(1));
-        writeDataRow(logPosZ, abagStatePos[2], errorPos[2], commandPos[2], endEffPose.p(2));
-        // abag_sched(&abagState, &error, &abag_command, &alpha);
-
-        // base_command.mutable_actuators(6)->set_position(base_feedback.actuators(6).position());
-
-        // base_command.mutable_actuators(6)->set_torque_joint(abag_command * joint_torque_limits[6] * 0.8);
-        // base_command.mutable_actuators(6)->set_torque_joint(1.0);
+        writeDataRow(logPosX, abagStatePos[0], totalElapsedTime.count(), errorPos[0], commandPos[0], endEffPose.p(0));
+        writeDataRow(logPosY, abagStatePos[1], totalElapsedTime.count(), errorPos[1], commandPos[1], endEffPose.p(1));
+        writeDataRow(logPosZ, abagStatePos[2], totalElapsedTime.count(), errorPos[2], commandPos[2], endEffPose.p(2));
 
         // Incrementing identifier ensures actuators can reject out of time frames
         base_command.set_frame_id(base_command.frame_id() + 1);
@@ -256,7 +245,10 @@ void example_cyclic_torque_control (
         }
         catch(...)
         {
-            logPosX.close(); logPosY.close(); logPosZ.close();
+            if (desiredPositionLog.is_open()) desiredPositionLog.close();
+            if (logPosX.is_open()) logPosX.close();
+            if (logPosY.is_open()) logPosY.close();
+            if (logPosZ.is_open()) logPosZ.close();
             std::cerr << "error sending command" << std::endl;
             throw;
         }
@@ -265,21 +257,21 @@ void example_cyclic_torque_control (
         if (waitMicroSeconds(loopStartTime, LOOP_DURATION) != 0) slowLoopCount++;
     }
 
-    // close log files
-    logPosX.close(); logPosY.close(); logPosZ.close();
+    // Set first actuator back in position
+    stopRobot(actuator_config);
 
+    // actuator_config->SetControlMode(control_mode_message, last_actuator_device_id);
     std::cout << "Torque control example completed" << std::endl;
     std::cout << "Number of loops which took longer than specified duration: " << slowLoopCount << std::endl;
-    // Set first actuator back in position
-    control_mode_message.set_control_mode(k_api::ActuatorConfig::ControlMode::POSITION);
-    for (int actuator_id = 1; actuator_id < ACTUATOR_COUNT + 1; actuator_id++)
-        actuator_config->SetControlMode(control_mode_message, actuator_id);
-    // actuator_config->SetControlMode(control_mode_message, last_actuator_device_id);
-    std::cout << "Torque control example clean exit" << std::endl;
 
     // Set the servoing mode back to Single Level
     servoing_mode.set_servoing_mode(k_api::Base::ServoingMode::SINGLE_LEVEL_SERVOING);
     base->SetServoingMode(servoing_mode);
+
+    // close log files
+    if (logPosX.is_open()) logPosX.close();
+    if (logPosY.is_open()) logPosY.close();
+    if (logPosZ.is_open()) logPosZ.close();
 
     // Wait for a bit
     std::this_thread::sleep_for(std::chrono::milliseconds(2000));
@@ -297,12 +289,14 @@ int main(int argc, char **argv)
     }
     catch (k_api::KDetailedException& ex)
     {
+        stopRobot(connection.mActuatorConfigClient.get());
         handleKinovaException(ex);
         return EXIT_FAILURE;
     }
-    catch (std::runtime_error& ex2)
+    catch (std::exception& ex)
     {
-        std::cout << "Error: " << ex2.what() << std::endl;
+        stopRobot(connection.mActuatorConfigClient.get());
+        std::cout << "Unhandled Error: " << ex.what() << std::endl;
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;

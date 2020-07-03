@@ -18,6 +18,11 @@
 
 #include "abag.h"
 
+#define PI 3.14159265358979323846
+#define DEG_TO_RAD(x) (x) * PI / 180.0
+#define RAD_TO_DEG(x) (x) * 180.0 / PI
+#define ACTUATOR_COUNT 7
+
 namespace k_api = Kinova::Api;
 namespace sc = std::chrono;
 
@@ -49,7 +54,10 @@ void handleKinovaException(k_api::KDetailedException& ex);
 bool waitMicroSeconds(const sc::time_point<sc::steady_clock> &pStartTime, const sc::microseconds &pDuration);
 
 void writeDataRow(
-    std::ofstream &pFileStream, const abagState_t &pState, double &pError, double &pCommand, double &pMeasured
+    std::ofstream &pFileStream, const abagState_t &pState,
+    long pTime, double &pError, double &pCommand, double &pMeasured
 );
+
+void stopRobot(k_api::ActuatorConfig::ActuatorConfigClient* actuator_config);
 
 #endif  // _KINOVA_UTIL_H

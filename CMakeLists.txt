@@ -50,7 +50,7 @@ include_directories(
     ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_SOURCE_DIR}/generated
 )
-set_source_files_properties(generated/abag.c PROPERTIES LANGUAGE CXX )
+set_source_files_properties(generated/abag.c PROPERTIES LANGUAGE CXX)
 
 link_libraries(
     ${orocos_kdl_LIBRARIES}
