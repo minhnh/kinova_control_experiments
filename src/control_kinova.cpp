@@ -103,11 +103,11 @@ void example_cyclic_torque_control (
     const std::vector<double> cart_force_limit {5.0, 5.0, 5.0, 5.0, 5.0, 5.0}; // N
 
     // ABAG parameters
-    const double alphaPosition[3] = { 0.75, 0.75, 0.75 };
+    const double alphaPosition[3] = { 0.8, 0.9, 0.95 };
     const double biasThresPos[3] = { 0.000407, 0.000407, 0.000407 };
     const double biasStepPos[3] = { 0.000400, 0.000400, 0.000400 };
-    const double gainThresPos[3] = { 0.502492, 0.502492, 0.502492 };
-    const double gainStepPos[3] = { 0.002, 0.002, 0.002 };
+    const double gainThresPos[3] = { 0.502492, 0.55, 0.550000 };
+    const double gainStepPos[3] = { 0.002, 0.003, 0.003 };
     double desiredPosistion[3] = { 0.0 };
     double errorPos[3] = { 0.0 };
     double commandPos[3] = { 0.0 };

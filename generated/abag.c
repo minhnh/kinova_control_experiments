@@ -82,7 +82,7 @@ void gainAdapater_sched(double const * e_bar, double const * gain_threshold, dou
 
   /* saturation saturateGain */
   if      (*adapted_gain > 1.) *adapted_gain = 1.;
-  else if (*adapted_gain < -1.) *adapted_gain = -1.;
+  else if (*adapted_gain < 0.) *adapted_gain = 0.;
 
   /* update output ports */
 }
