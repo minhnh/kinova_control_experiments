@@ -1,3 +1,6 @@
+/**
+* @copyright 2020 Minh Nguyen
+*/
 #ifndef _CONSTANTS_HPP_
 #define _CONSTANTS_HPP_
 

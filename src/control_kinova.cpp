@@ -1,6 +1,5 @@
-/*
-* Copyright (c) 2020 Minh Nguyen inc. All rights reserved.
-*
+/**
+* @copyright 2020 Minh Nguyen
 */
 #include <fstream>
 #include <iostream>

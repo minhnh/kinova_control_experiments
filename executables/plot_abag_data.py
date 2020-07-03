@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+"""
+@author: Minh Nguyen
+"""
 import argparse
 import csv
 from enum import Enum

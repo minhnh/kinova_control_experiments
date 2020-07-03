@@ -1,3 +1,6 @@
+/**
+* @copyright 2020 Minh Nguyen
+*/
 #include <chrono>
 #include <urdf/model.h>
 #include <KDetailedException.h>

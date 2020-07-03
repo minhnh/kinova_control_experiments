@@ -10,3 +10,8 @@ A sample execution:
 ```
 ./executables/plot_abag_data.py ./build/ctrl_data_pos_z.csv ./build/desired_values.csv pos_z
 ```
+
+## Maintainers:
+
+* _Minh Nguyen_ email: `minh.nguyen at h-brs dot de`
+* _Djordje Vukcevic_ email: `djordje.vukcevic at h-brs dot de`, GitHub: `djolemne`

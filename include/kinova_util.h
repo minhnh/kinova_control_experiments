@@ -1,3 +1,6 @@
+/*
+* Copyright (c) 2020 Minh Nguyen inc. All rights reserved.
+*/
 #ifndef _KINOVA_UTIL_H_
 #define _KINOVA_UTIL_H_
 
