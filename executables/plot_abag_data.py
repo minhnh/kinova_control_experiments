@@ -14,6 +14,9 @@ class ColumnsDesired(Enum):
     POS_X = 0
     POS_Y = 1
     POS_Z = 2
+    VEL_X = 3
+    VEL_Y = 4
+    VEL_Z = 5
 
     def get_column(name):
         if name == 'pos_x':
@@ -22,6 +25,12 @@ class ColumnsDesired(Enum):
             return ColumnsDesired.POS_Y.value
         elif name == 'pos_z':
             return ColumnsDesired.POS_Z.value
+        if name == 'vel_x':
+            return ColumnsDesired.VEL_X.value
+        elif name == 'vel_y':
+            return ColumnsDesired.VEL_Y.value
+        elif name == 'vel_z':
+            return ColumnsDesired.VEL_Z.value
         else:
             raise ValueError("invalid column name: " + name)
 
@@ -117,7 +126,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="simple script to plot ABAG control data")
     parser.add_argument("csv_file", help="CSV file containing ABAG control data")
     parser.add_argument("desired_file", help="CSV file containing desired values")
-    parser.add_argument("ctrl_dimension", choices=['pos_x', 'pos_y', 'pos_z'],
+    parser.add_argument("ctrl_dimension", choices=['pos_x', 'pos_y', 'pos_z', 'vel_x', 'vel_y', 'vel_z'],
                         help="specify which dimension is being controlled in data")
     args = parser.parse_args()
     try:
