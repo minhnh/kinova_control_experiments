@@ -70,6 +70,16 @@ def read_csv_data(data_file, delimiter=','):
     return data, headers
 
 
+def setup_subplot(axes, ylabel, legend_loc=None):
+    axes.set(ylabel=ylabel)
+    if legend_loc is not None:
+        axes.legend(loc=legend_loc)
+
+    axes.grid(b=True, which='major', color='#666666', linestyle='-')
+    axes.minorticks_on()
+    axes.grid(b=True, which='minor', color='#999999', linestyle='-', alpha=0.2)
+
+
 def plot_csv_data(csv_file_path, desired_file, ctrl_dimension):
     if not os.path.isfile(csv_file_path):
         raise ValueError("CSV file '{}' does not exist".format(csv_file_path))
@@ -93,31 +103,25 @@ def plot_csv_data(csv_file_path, desired_file, ctrl_dimension):
     ax1.axhline(y=desired_val, label="desired " + desired_val_name, c='y')
     ax1.plot(data[headers[Columns.TIME_POINT.value]], data[headers[Columns.MEASURED.value]],
              label=headers[Columns.MEASURED.value], c='m')
-    ax1.set(ylabel='Desired vs ' + headers[Columns.MEASURED.value])
-    ax1.legend(loc=4)
+    setup_subplot(ax1, ylabel='desired vs ' + headers[Columns.MEASURED.value], legend_loc=4)
 
-    ax2.axhline(c='lightgray')
     ax2.plot(data[headers[Columns.TIME_POINT.value]], data[headers[Columns.FILTERED_ERR.value]])
-    ax2.set(ylabel=headers[Columns.FILTERED_ERR.value])
+    setup_subplot(ax2, ylabel=headers[Columns.FILTERED_ERR.value])
 
-    ax3.axhline(c='lightgray')
     ax3.plot(data[headers[Columns.TIME_POINT.value]], gain_times_sign_err, label='gain * signed err', c='r')
     ax3.plot(data[headers[Columns.TIME_POINT.value]], data[headers[Columns.COMMAND.value]], label='command', c='b')
     ax3.plot(data[headers[Columns.TIME_POINT.value]], data[headers[Columns.BIAS.value]], label='bias', c='g')
-    ax3.legend(loc=3)
-    ax3.set(ylabel='bias gain command')
+    setup_subplot(ax3, ylabel='bias gain*e_sign cmd', legend_loc=3)
 
-    ax4.axhline(c='lightgray')
     ax4.plot(data[headers[Columns.TIME_POINT.value]], data[headers[Columns.BIAS.value]], c='g')
-    ax4.set(ylabel=headers[Columns.BIAS.value])
+    setup_subplot(ax4, ylabel=headers[Columns.BIAS.value])
 
-    ax5.axhline(c='lightgray')
     ax5.plot(data[headers[Columns.TIME_POINT.value]], gain_times_sign_err, c='r')
-    ax5.set(ylabel='gain * signed err')
+    setup_subplot(ax5, ylabel='gain * signed err')
 
-    ax6.axhline(c='lightgray')
     ax6.plot(data[headers[Columns.TIME_POINT.value]], data[headers[Columns.COMMAND.value]], c='b')
-    ax6.set(xlabel='time (ms)', ylabel=headers[Columns.COMMAND.value])
+    setup_subplot(ax6, ylabel=headers[Columns.COMMAND.value])
+    ax6.set(xlabel='time (ms)')
 
     plt.show()
 
