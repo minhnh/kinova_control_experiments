@@ -50,6 +50,11 @@ include_directories(
     ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_SOURCE_DIR}/generated
 )
+
+list(APPEND control_kinova_SOURCES
+    ${PROJECT_SOURCE_DIR}/generated/abag.c
+    ${PROJECT_SOURCE_DIR}/src/kinova_util.cpp
+)
 set_source_files_properties(generated/abag.c PROPERTIES LANGUAGE CXX)
 
 link_libraries(
@@ -58,8 +63,16 @@ link_libraries(
     pthread
 )
 
-add_executable(control_kinova
-    src/control_kinova.cpp
-    src/kinova_util.cpp
-    generated/abag.c
-)
+# find all CPP files in the ./executables directory and create a executable target
+# for each of them
+file(GLOB EXE_LIST RELATIVE ${PROJECT_SOURCE_DIR} "executables/*.cpp")
+foreach ( SRC_FILE ${EXE_LIST} )
+    MESSAGE(${SRC_FILE})
+    string(REPLACE ".cpp" "" TARGET_EXE_NAME ${SRC_FILE})
+    string(REPLACE "executables/" "" TARGET_EXE_NAME ${TARGET_EXE_NAME})
+
+    MESSAGE("creating TARGET_EXE_NAME: '${TARGET_EXE_NAME}'")
+
+    add_executable(${TARGET_EXE_NAME} ${SRC_FILE} ${control_kinova_SOURCES})
+
+endforeach()

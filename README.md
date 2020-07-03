@@ -1,7 +1,10 @@
 # kinova_control_experiments
 
 Simple impedance controller for Kinova Gen 3 arm which was tested on a real robot. This requries ROS to work because of
-`kdl_parser` for URDF files.
+`kdl_parser` for URDF files. The ABAG implementation is generated using Domain-Specific languages realized in
+[Jetbrains MPS](https://www.jetbrains.com/mps/), which can be found at the
+[`rosym-project/controller-dsl`](https://github.com/rosym-project/controller-dsl) and
+[`rosym-project/algorithm-dsl`](https://github.com/rosym-project/algorithm-dsl) repositories.
 
 ## Contents
 
