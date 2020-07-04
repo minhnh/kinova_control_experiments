@@ -44,6 +44,11 @@ include_directories(
     ${orocos_kdl_INCLUDE_DIRS}
     ${kdl_parser_INCLUDE_DIRS}
 )
+link_libraries(
+    ${orocos_kdl_LIBRARIES}
+    ${kdl_parser_LIBRARIES}
+    pthread
+)
 
 # user code
 include_directories(
@@ -51,28 +56,20 @@ include_directories(
     ${PROJECT_SOURCE_DIR}/generated
 )
 
-list(APPEND control_kinova_SOURCES
+set_source_files_properties(generated/abag.c PROPERTIES LANGUAGE CXX)
+add_library(kinova_control
     ${PROJECT_SOURCE_DIR}/generated/abag.c
     ${PROJECT_SOURCE_DIR}/src/kinova_util.cpp
-)
-set_source_files_properties(generated/abag.c PROPERTIES LANGUAGE CXX)
-
-link_libraries(
-    ${orocos_kdl_LIBRARIES}
-    ${kdl_parser_LIBRARIES}
-    pthread
 )
 
 # find all CPP files in the ./executables directory and create a executable target
 # for each of them
 file(GLOB EXE_LIST RELATIVE ${PROJECT_SOURCE_DIR} "executables/*.cpp")
 foreach ( SRC_FILE ${EXE_LIST} )
-    MESSAGE(${SRC_FILE})
     string(REPLACE ".cpp" "" TARGET_EXE_NAME ${SRC_FILE})
     string(REPLACE "executables/" "" TARGET_EXE_NAME ${TARGET_EXE_NAME})
 
     MESSAGE("creating TARGET_EXE_NAME: '${TARGET_EXE_NAME}'")
-
-    add_executable(${TARGET_EXE_NAME} ${SRC_FILE} ${control_kinova_SOURCES})
-
+    add_executable(${TARGET_EXE_NAME} ${SRC_FILE})
+    target_link_libraries(${TARGET_EXE_NAME} kinova_control)
 endforeach()
