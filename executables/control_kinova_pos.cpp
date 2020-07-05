@@ -7,6 +7,7 @@
 #include <vector>
 #include <math.h>
 #include <chrono>
+#include <libconfig.h++>
 
 #include <kdl/chainjnttojacsolver.hpp>
 #include <kdl/chainidsolver_recursive_newton_euler.hpp>
@@ -18,44 +19,39 @@
 #include "constants.hpp"
 
 #define REPO_DIR "/home/minh/workspace/kinova_control_experiments/"
+#define CTRL_APPROACH "position"
 
 namespace k_api = Kinova::Api;
 namespace sc = std::chrono;
 namespace kc = kinova_ctrl;
 namespace kc_const = kinova_ctrl::constants;
-
-#define IP_ADDRESS "192.168.1.10"
-#define PORT 10000
-#define PORT_REAL_TIME 10001
-
-std::chrono::duration <double, std::micro> loop_interval{};
+namespace kcc_conf = kinova_ctrl::constants::config;
 
 void impedance_control_pos (
     k_api::Base::BaseClient* base,
     k_api::BaseCyclic::BaseCyclicClient* base_cyclic,
-    k_api::ActuatorConfig::ActuatorConfigClient* actuator_config
-)
-{
-    const std::string UrdfPath = REPO_DIR + kc_const::kinova::URDF_PATH;
-    std::cout << "loading URDF file at: " << UrdfPath << std::endl;
-    KDL::Tree kinovaTree; KDL::Chain kinovaChain;
-    kc::loadUrdfModel(UrdfPath, kinovaTree, kinovaChain);
-    // Initialize solvers
-    const KDL::JntArray ZERO_ARRAY(7);
-    const KDL::Wrenches ZERO_WRENCHES(kinovaChain.getNrOfSegments(), KDL::Wrench::Zero());
+    k_api::ActuatorConfig::ActuatorConfigClient* actuator_config,
+    const KDL::Chain &pArmChain,
+    const std::map<std::string, std::vector<double>> &pAbagConfigs,
+    const std::vector<double> &pCartForceLimits
+) {
+    /* Initialize KDL data structures */
+    int returnFlag = 0;
+    const KDL::Vector GRAVITY(0.0, 0.0, -9.81289);
+    const KDL::JntArray ZERO_ARRAY(ACTUATOR_COUNT);
+    const KDL::Wrenches ZERO_WRENCHES(pArmChain.getNrOfSegments(), KDL::Wrench::Zero());
+    KDL::JntArray jntCmdTorques(ACTUATOR_COUNT), jntPositions(ACTUATOR_COUNT), jntVelocities(ACTUATOR_COUNT),
+                  jntImpedanceTorques(ACTUATOR_COUNT);
 
-    KDL::Jacobian jacobianEndEff(kinovaChain.getNrOfJoints());
+    KDL::Jacobian jacobianEndEff(pArmChain.getNrOfJoints());
     KDL::Frame endEffPose;
     Eigen::Matrix<double, 6, 1> endEffForce;
     endEffForce.setZero();
 
-    int returnFlag = 0;
-    KDL::ChainJntToJacSolver jacobSolver(kinovaChain);
-    KDL::ChainFkSolverPos_recursive fkSolverPos(kinovaChain);
-    std::shared_ptr<KDL::ChainIdSolver_RNE> idSolver = std::make_shared<KDL::ChainIdSolver_RNE>(kinovaChain,
-        KDL::Vector(0.0, 0.0, -9.81289));
-
-    KDL::JntArray jntCmdTorques(7), jntPositions(7), jntVelocities(7), jnt_torque(7), jntImpedanceTorques(7);
+    /* KDL solvers */
+    KDL::ChainJntToJacSolver jacobSolver(pArmChain);
+    KDL::ChainFkSolverPos_recursive fkSolverPos(pArmChain);
+    auto idSolver = std::make_shared<KDL::ChainIdSolver_RNE>(pArmChain, GRAVITY);
 
     // Clearing faults
     try
@@ -68,17 +64,18 @@ void impedance_control_pos (
         throw;
     }
 
-    k_api::BaseCyclic::Feedback base_feedback;
-    k_api::BaseCyclic::Command  base_command;
-    auto servoing_mode = k_api::Base::ServoingModeInformation();
+    /* Kinova API structures */
+    k_api::BaseCyclic::Feedback baseFb;
+    k_api::BaseCyclic::Command  baseCmd;
+    auto servoingMode = k_api::Base::ServoingModeInformation();
 
-    std::cout << "Initializing the arm for torque control example" << std::endl;
+    std::cout << "Initializing the arm for '" << CTRL_APPROACH << "' control" << std::endl;
 
     // Set the base in low-level servoing mode
     try {
-        servoing_mode.set_servoing_mode(k_api::Base::ServoingMode::LOW_LEVEL_SERVOING);
-        base->SetServoingMode(servoing_mode);
-        base_feedback = base_cyclic->RefreshFeedback();
+        servoingMode.set_servoing_mode(k_api::Base::ServoingMode::LOW_LEVEL_SERVOING);
+        base->SetServoingMode(servoingMode);
+        baseFb = base_cyclic->RefreshFeedback();
     } catch (...) {
         std::cerr << "error setting low level control mode" << std::endl;
         throw;
@@ -87,29 +84,20 @@ void impedance_control_pos (
     // Initialize each actuator to their current position
     // Save the current actuator position, to avoid a following error
     for (int i = 0; i < ACTUATOR_COUNT; i++)
-        base_command.add_actuators()->set_position(base_feedback.actuators(i).position());
+        baseCmd.add_actuators()->set_position(baseFb.actuators(i).position());
 
     // Send a first frame
-    base_feedback = base_cyclic->Refresh(base_command);
+    baseFb = base_cyclic->Refresh(baseCmd);
 
     // Set last actuator in torque mode now that the command is equal to measure
-    auto control_mode_message = k_api::ActuatorConfig::ControlModeInformation();
-    control_mode_message.set_control_mode(k_api::ActuatorConfig::ControlMode::TORQUE);
+    auto ctrlModeInfo = k_api::ActuatorConfig::ControlModeInformation();
+    ctrlModeInfo.set_control_mode(k_api::ActuatorConfig::ControlMode::TORQUE);
 
     for (int actuator_id = 1; actuator_id < ACTUATOR_COUNT + 1; actuator_id++)
-        actuator_config->SetControlMode(control_mode_message, actuator_id);
-
-    const std::vector<double> cart_force_limit {5.0, 5.0, 5.0, 5.0, 5.0, 5.0}; // N
+        actuator_config->SetControlMode(ctrlModeInfo, actuator_id);
 
     // ABAG parameters
-    const double alphaPosition[3] = { 0.8, 0.9, 0.95 };
-    const double biasThresPos[3] = { 0.000407, 0.000407, 0.000407 };
-    const double biasStepPos[3] = { 0.000400, 0.000400, 0.000400 };
-    const double gainThresPos[3] = { 0.502492, 0.55, 0.550000 };
-    const double gainStepPos[3] = { 0.002, 0.003, 0.003 };
-    double desiredPosistion[3] = { 0.0 };
-    double errorPos[3] = { 0.0 };
-    double commandPos[3] = { 0.0 };
+    KDL::Vector desiredPos, errorPos, commandPos;
     abagState_t abagStatePos[3];
     for (int i = 0; i < 3; i++) {
         initialize_abagState(&abagStatePos[i]);
@@ -131,7 +119,7 @@ void impedance_control_pos (
     // open log file streams
     std::ofstream desiredPositionLog;
     desiredPositionLog.open("desired_values.csv", std::ofstream::out | std::ofstream::trunc);
-    desiredPositionLog << "position X, position Y, position Z" << std::endl;
+    desiredPositionLog << "position X, position Y, position Z, velocity X, velocity Y, velocity Z" << std::endl;
     std::ofstream logPosX, logPosY, logPosZ;
     logPosX.open("ctrl_data_pos_x.csv", std::ofstream::out | std::ofstream::trunc);
     logPosY.open("ctrl_data_pos_y.csv", std::ofstream::out | std::ofstream::trunc);
@@ -147,7 +135,7 @@ void impedance_control_pos (
 
         try
         {
-            base_feedback = base_cyclic->RefreshFeedback();
+            baseFb = base_cyclic->RefreshFeedback();
         }
         catch(...)
         {
@@ -161,9 +149,8 @@ void impedance_control_pos (
 
         for (int i = 0; i < ACTUATOR_COUNT; i++)
         {
-            jntPositions(i) = DEG_TO_RAD(base_feedback.actuators(i).position()); // deg
-            jntVelocities(i) = DEG_TO_RAD(base_feedback.actuators(i).velocity()); // deg
-            jnt_torque(i)   = base_feedback.actuators(i).torque(); // nm
+            jntPositions(i) = DEG_TO_RAD(baseFb.actuators(i).position()); // deg
+            jntVelocities(i) = DEG_TO_RAD(baseFb.actuators(i).velocity()); // deg
         }
 
         // Kinova API provides only positive angle values
@@ -183,34 +170,28 @@ void impedance_control_pos (
         returnFlag = fkSolverPos.JntToCart(jntPositions, endEffPose);
         if (returnFlag != 0) break;
 
-        // returnFlag = fk_solver_vel.JntToCart(jntPositions, jnt_vel_, end_eff_twist);
-        // if (returnFlag != 0) break;
-
         if (iterationCount == 1)
         {
-            desiredPosistion[0] = endEffPose.p(0) + 0.03;
-            desiredPosistion[1] = endEffPose.p(1) + 0.03;
-            desiredPosistion[2] = endEffPose.p(2) + 0.03;
-            desiredPositionLog << desiredPosistion[0] << "," << desiredPosistion[1] << ","
-                               << desiredPosistion[2] << std::endl;
+            desiredPos[0] = endEffPose.p(0) + 0.03;
+            desiredPos[1] = endEffPose.p(1) + 0.03;
+            desiredPos[2] = endEffPose.p(2) + 0.03;
+            // write desired position and zero velocities
+            desiredPositionLog << desiredPos[0] << "," << desiredPos[1] << ","
+                               << desiredPos[2] << "0.0, 0.0, 0.0" << std::endl;
             if (desiredPositionLog.is_open()) desiredPositionLog.close();
         }
 
-        errorPos[0] = desiredPosistion[0] - endEffPose.p(0);
-        errorPos[1] = desiredPosistion[1] - endEffPose.p(1);
-        errorPos[2] = desiredPosistion[2] - endEffPose.p(2);
+        errorPos = desiredPos - endEffPose.p;
 
-        abag_sched(&abagStatePos[0], &errorPos[0], &commandPos[0], &alphaPosition[0],
-                   &biasThresPos[0], &biasStepPos[0], &gainThresPos[0], &gainStepPos[0]);
-        abag_sched(&abagStatePos[1], &errorPos[1], &commandPos[1], &alphaPosition[1],
-                   &biasThresPos[1], &biasStepPos[1], &gainThresPos[1], &gainStepPos[1]);
-        abag_sched(&abagStatePos[2], &errorPos[2], &commandPos[2], &alphaPosition[2],
-                   &biasThresPos[2], &biasStepPos[2], &gainThresPos[2], &gainStepPos[2]);
+        for (int i = 0; i < 3; i++) {
+            abag_sched(&abagStatePos[i], &errorPos[i], &commandPos[i], &(pAbagConfigs.at(kcc_conf::ALPHA)[i]),
+                &(pAbagConfigs.at(kcc_conf::BIAS_THRES)[i]), &(pAbagConfigs.at(kcc_conf::BIAS_STEP)[i]),
+                &(pAbagConfigs.at(kcc_conf::GAIN_THRES)[i]), &(pAbagConfigs.at(kcc_conf::GAIN_STEP)[i]));
+        }
 
-        endEffForce(0) = commandPos[0] * cart_force_limit[0];
-        endEffForce(1) = commandPos[1] * cart_force_limit[1];
-        endEffForce(2) = commandPos[2] * cart_force_limit[2];
-        // std::cout << end_eff_force.transpose() << std::endl;
+        endEffForce(0) = commandPos[0] * pCartForceLimits[0];
+        endEffForce(1) = commandPos[1] * pCartForceLimits[1];
+        endEffForce(2) = commandPos[2] * pCartForceLimits[2];
 
         jntImpedanceTorques.data = jacobianEndEff.data.transpose() * endEffForce;
 
@@ -219,29 +200,29 @@ void impedance_control_pos (
         {
             jntCmdTorques(i) = jntCmdTorques(i) + jntImpedanceTorques(i);
             if      (jntCmdTorques(i) >=  kc_const::kinova::JOINT_TORQUE_LIMITS[i])
-                jntCmdTorques(i) =  kc_const::kinova::JOINT_TORQUE_LIMITS[i] - 0.001;
+                     jntCmdTorques(i) =   kc_const::kinova::JOINT_TORQUE_LIMITS[i] - 0.001;
             else if (jntCmdTorques(i) <= -kc_const::kinova::JOINT_TORQUE_LIMITS[i])
-                jntCmdTorques(i) = -kc_const::kinova::JOINT_TORQUE_LIMITS[i] + 0.001;
-            base_command.mutable_actuators(i)->set_position(base_feedback.actuators(i).position());
-            base_command.mutable_actuators(i)->set_torque_joint(jntCmdTorques(i));
+                     jntCmdTorques(i) =  -kc_const::kinova::JOINT_TORQUE_LIMITS[i] + 0.001;
+            baseCmd.mutable_actuators(i)->set_position(baseFb.actuators(i).position());
+            baseCmd.mutable_actuators(i)->set_torque_joint(jntCmdTorques(i));
         }
 
         // std::cout << jntCmdTorques.data.transpose() << std::endl;
-        // control
+        // write to log files
         kc::writeDataRow(logPosX, abagStatePos[0], totalElapsedTime.count(), errorPos[0], commandPos[0], endEffPose.p(0));
         kc::writeDataRow(logPosY, abagStatePos[1], totalElapsedTime.count(), errorPos[1], commandPos[1], endEffPose.p(1));
         kc::writeDataRow(logPosZ, abagStatePos[2], totalElapsedTime.count(), errorPos[2], commandPos[2], endEffPose.p(2));
 
         // Incrementing identifier ensures actuators can reject out of time frames
-        base_command.set_frame_id(base_command.frame_id() + 1);
-        if (base_command.frame_id() > 65535) base_command.set_frame_id(0);
+        baseCmd.set_frame_id(baseCmd.frame_id() + 1);
+        if (baseCmd.frame_id() > 65535) baseCmd.set_frame_id(0);
 
         for (int idx = 0; idx < ACTUATOR_COUNT; idx++)
-            base_command.mutable_actuators(idx)->set_command_id(base_command.frame_id());
+            baseCmd.mutable_actuators(idx)->set_command_id(baseCmd.frame_id());
 
         try
         {
-            base_feedback = base_cyclic->Refresh(base_command, 0);
+            baseFb = base_cyclic->Refresh(baseCmd, 0);
         }
         catch(...)
         {
@@ -260,13 +241,12 @@ void impedance_control_pos (
     // Set first actuator back in position
     kc::stopRobot(actuator_config);
 
-    // actuator_config->SetControlMode(control_mode_message, last_actuator_device_id);
     std::cout << "Torque control example completed" << std::endl;
     std::cout << "Number of loops which took longer than specified duration: " << slowLoopCount << std::endl;
 
     // Set the servoing mode back to Single Level
-    servoing_mode.set_servoing_mode(k_api::Base::ServoingMode::SINGLE_LEVEL_SERVOING);
-    base->SetServoingMode(servoing_mode);
+    servoingMode.set_servoing_mode(k_api::Base::ServoingMode::SINGLE_LEVEL_SERVOING);
+    base->SetServoingMode(servoingMode);
 
     // close log files
     if (logPosX.is_open()) logPosX.close();
@@ -279,24 +259,63 @@ void impedance_control_pos (
 
 int main(int argc, char **argv)
 {
-    kc::KinovaBaseConnection connection(IP_ADDRESS, PORT, PORT_REAL_TIME, "admin", "kinova1_area4251");
-
-    // Example core
-    kc::move_to_home_position(connection.mBaseClient.get());
+    // Load configurations
+    libconfig::Config cfg;    // this needs to exist to query the root setting, otherwise will cause segfault
+    std::map<std::string, std::vector<double>> abagConfigs;
+    std::vector<double> cartForceLimits;
+    std::string hostName, username, password;
+    unsigned int port, portRealTime;
     try
     {
-        impedance_control_pos(connection.mBaseClient.get(), connection.mBaseCyclicClient.get(), connection.mActuatorConfigClient.get());
+        libconfig::Setting& root = kc::loadConfigFile(cfg, REPO_DIR"config/kinova.cfg");
+
+        kc::loadAbagConfig(root, CTRL_APPROACH, abagConfigs);
+
+        kc::loadKinovaConfig(root, cartForceLimits, hostName, username, password, port, portRealTime);
+
+        kc::printConfigurations(CTRL_APPROACH, hostName, username, password, port, portRealTime,
+                                cartForceLimits, abagConfigs);
     }
-    catch (k_api::KDetailedException& ex)
+    catch (const std::exception &ex)
     {
-        kc::stopRobot(connection.mActuatorConfigClient.get());
-        kc::printKinovaException(ex);
+        std::cerr << "failed to load configuration file: " << ex.what() << std::endl;
         return EXIT_FAILURE;
     }
-    catch (std::exception& ex)
+
+    // Load URDF file
+    const std::string UrdfPath = REPO_DIR + kc_const::kinova::URDF_PATH;
+    std::cout << "loading URDF file: " << UrdfPath << std::endl;
+    KDL::Tree kinovaTree; KDL::Chain kinovaChain;
+    kc::loadUrdfModel(UrdfPath, kinovaTree, kinovaChain);
+
+    try
     {
-        kc::stopRobot(connection.mActuatorConfigClient.get());
-        std::cout << "Unhandled Error: " << ex.what() << std::endl;
+        kc::KinovaBaseConnection connection(hostName, port, portRealTime, username, password);
+
+        // Example core
+        kc::move_to_home_position(connection.mBaseClient.get());
+        try
+        {
+            impedance_control_pos(
+                connection.mBaseClient.get(), connection.mBaseCyclicClient.get(), connection.mActuatorConfigClient.get(),
+                kinovaChain, abagConfigs, cartForceLimits);
+        }
+        catch (k_api::KDetailedException& ex)
+        {
+            kc::stopRobot(connection.mActuatorConfigClient.get());
+            kc::printKinovaException(ex);
+            return EXIT_FAILURE;
+        }
+        catch (std::exception& ex)
+        {
+            kc::stopRobot(connection.mActuatorConfigClient.get());
+            std::cout << "Unhandled Error: " << ex.what() << std::endl;
+            return EXIT_FAILURE;
+        }
+    }
+    catch(const std::exception& e)
+    {
+        std::cerr << "failed to establish connection: " << e.what() << '\n';
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;

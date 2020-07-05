@@ -34,6 +34,10 @@ void loadKinovaConfig(
     std::string &pUsername, std::string &pPassword, unsigned int &pPort, unsigned int &pPortRealTime
 );
 
+void printConfigurations(const char* pCtrlApproach, const std::string &pHostname, const std::string &pUser,
+    const std::string &pPasswd, const unsigned int &pPort, const unsigned int &pPortRT,
+    const std::vector<double> &pCartForceLimits, const std::map<std::string, std::vector<double>> &pAbagConfigs);
+
 }  // namespace kinova_ctrl
 
 #endif  // KINOVA_CTRL_UTIL_H

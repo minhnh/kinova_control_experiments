@@ -39,6 +39,7 @@ void writeDataRow(
 
 libconfig::Setting & loadConfigFile(libconfig::Config &pCfg, const char* pFileName)
 {
+    std::cout << "loading config file: " << pFileName << std::endl;
     try
     {
         pCfg.readFile(pFileName);
@@ -98,6 +99,27 @@ void loadAbagConfig(const libconfig::Setting &pConfigRoot, const char* pCtrlAppr
     {
         std::cerr << "type exception: " << typeEx.what() << std::endl;
         throw;
+    }
+}
+
+void printConfigurations(const char* pCtrlApproach, const std::string &pHostname, const std::string &pUser,
+    const std::string &pPasswd, const unsigned int &pPort, const unsigned int &pPortRT,
+    const std::vector<double> &pCartForceLimits, const std::map<std::string, std::vector<double>> &pAbagConfigs)
+{
+    std::cout << "Robot configurations for '" << pCtrlApproach << "' approach:" << std::endl
+                  << "  Hostname: " << pHostname << std::endl
+                  << "  Username: " << pUser << ", password: " << pPasswd << std::endl
+                  << "  Port: " << pPort << ", real-time port: " << pPortRT << std::endl;
+    std::cout << "  Cartesian force limits: ";
+    for (const auto &value : pCartForceLimits) printf("%7.3f", value);
+    std::cout << std::endl;
+
+    std::cout << "ABAG Parameters: " << std::endl;
+    for (const auto &kvPair : pAbagConfigs)
+    {
+        printf("%15s", kvPair.first.c_str());
+        for (const auto &value : kvPair.second) printf("%10.6f", value);;
+        printf("\n");
     }
 }
 
