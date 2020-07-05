@@ -5,31 +5,32 @@
 #include <iostream>
 #include <string>
 #include <vector>
-#include <math.h>
-#include <stdlib.h> /* abs */
 #include <chrono>
-#include <time.h>
-#include <unistd.h>
+#include <libconfig.h++>
 
 #include <kdl/chainjnttojacsolver.hpp>
 #include <kdl/chainidsolver_recursive_newton_euler.hpp>
 #include <kdl/chainfksolverpos_recursive.hpp>
 #include <kdl/chainfksolvervel_recursive.hpp>
 
+#include "util.h"
 #include "kinova_util.h"
 #include "abag.h"
 #include "constants.hpp"
 
 #define REPO_DIR "/home/minh/workspace/kinova_control_experiments/"
+#define CTRL_APPROACH "position_velocity"
 
 namespace k_api = Kinova::Api;
 namespace sc = std::chrono;
+namespace kc = kinova_ctrl;
+namespace kc_const = kinova_ctrl::constants;
 
 #define IP_ADDRESS "192.168.1.10"
 #define PORT 10000
 #define PORT_REAL_TIME 10001
 
-std::chrono::duration <double, std::micro> loop_interval{};
+sc::duration <double, std::micro> loop_interval{};
 
 void example_cyclic_torque_control (
     k_api::Base::BaseClient* base,
@@ -37,10 +38,10 @@ void example_cyclic_torque_control (
     k_api::ActuatorConfig::ActuatorConfigClient* actuator_config
 )
 {
-    const std::string UrdfPath = REPO_DIR + constants::kinova::URDF_PATH;
+    const std::string UrdfPath = REPO_DIR + kc_const::kinova::URDF_PATH;
     std::cout << "loading URDF file at: " << UrdfPath << std::endl;
     KDL::Tree kinovaTree; KDL::Chain kinovaChain;
-    loadUrdfModel(UrdfPath, kinovaTree, kinovaChain);
+    kc::loadUrdfModel(UrdfPath, kinovaTree, kinovaChain);
     // Initialize solvers
     const KDL::JntArray ZERO_ARRAY(7);
     const KDL::Wrenches ZERO_WRENCHES(kinovaChain.getNrOfSegments(), KDL::Wrench::Zero());
@@ -164,7 +165,7 @@ void example_cyclic_torque_control (
         }
         catch(...)
         {
-            stopRobot(actuator_config);
+            kc::stopRobot(actuator_config);
             if (desiredValuesLog.is_open()) desiredValuesLog.close();
             if (logPosX.is_open()) logPosX.close();
             if (logPosY.is_open()) logPosY.close();
@@ -256,12 +257,12 @@ void example_cyclic_torque_control (
         }
 
         // control
-        writeDataRow(logPosX, abagStates[0], totalElapsedTime.count(), errors[0], commands[0], endEffPose.p(0));
-        writeDataRow(logPosY, abagStates[1], totalElapsedTime.count(), errors[1], commands[1], endEffPose.p(1));
-        writeDataRow(logPosZ, abagStates[2], totalElapsedTime.count(), errors[2], commands[2], endEffPose.p(2));
-        writeDataRow(logVelX, abagStates[3], totalElapsedTime.count(), errors[3], commands[3], endEffTwist.p.v(0));
-        writeDataRow(logVelY, abagStates[4], totalElapsedTime.count(), errors[4], commands[4], endEffTwist.p.v(1));
-        writeDataRow(logVelZ, abagStates[5], totalElapsedTime.count(), errors[5], commands[5], endEffTwist.p.v(2));
+        kc::writeDataRow(logPosX, abagStates[0], totalElapsedTime.count(), errors[0], commands[0], endEffPose.p(0));
+        kc::writeDataRow(logPosY, abagStates[1], totalElapsedTime.count(), errors[1], commands[1], endEffPose.p(1));
+        kc::writeDataRow(logPosZ, abagStates[2], totalElapsedTime.count(), errors[2], commands[2], endEffPose.p(2));
+        kc::writeDataRow(logVelX, abagStates[3], totalElapsedTime.count(), errors[3], commands[3], endEffTwist.p.v(0));
+        kc::writeDataRow(logVelY, abagStates[4], totalElapsedTime.count(), errors[4], commands[4], endEffTwist.p.v(1));
+        kc::writeDataRow(logVelZ, abagStates[5], totalElapsedTime.count(), errors[5], commands[5], endEffTwist.p.v(2));
 
         // Incrementing identifier ensures actuators can reject out of time frames
         base_command.set_frame_id(base_command.frame_id() + 1);
@@ -276,7 +277,7 @@ void example_cyclic_torque_control (
         }
         catch(...)
         {
-            stopRobot(actuator_config);
+            kc::stopRobot(actuator_config);
             if (desiredValuesLog.is_open()) desiredValuesLog.close();
             if (logPosX.is_open()) logPosX.close();
             if (logPosY.is_open()) logPosY.close();
@@ -289,11 +290,11 @@ void example_cyclic_torque_control (
         }
 
         // Enforce the constant loop time and count how many times the loop was late
-        if (waitMicroSeconds(loopStartTime, LOOP_DURATION) != 0) slowLoopCount++;
+        if (kc::waitMicroSeconds(loopStartTime, LOOP_DURATION) != 0) slowLoopCount++;
     }
 
     // Set first actuator back in position
-    stopRobot(actuator_config);
+    kc::stopRobot(actuator_config);
 
     // actuator_config->SetControlMode(control_mode_message, last_actuator_device_id);
     std::cout << "Torque control example completed" << std::endl;
@@ -312,28 +313,48 @@ void example_cyclic_torque_control (
     if (logVelZ.is_open()) logVelZ.close();
 
     // Wait for a bit
-    std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+    std::this_thread::sleep_for(sc::milliseconds(2000));
 }
 
 int main(int argc, char **argv)
 {
-    KinovaBaseConnection connection(IP_ADDRESS, PORT, PORT_REAL_TIME, "admin", "kinova1_area4251");
-
-    // Example core
-    move_to_home_position(connection.mBaseClient.get());
+    // Load configurations
+    libconfig::Config cfg;    // this needs to exist to query the root setting, otherwise will cause segfault
     try
     {
-        example_cyclic_torque_control(connection.mBaseClient.get(), connection.mBaseCyclicClient.get(), connection.mActuatorConfigClient.get());
+        libconfig::Setting& root = kc::loadConfigFile(cfg, REPO_DIR"config/abag.cfg");
+        std::vector<double> alphas;
+        kc::loadAbagConfig(root, CTRL_APPROACH, alphas);
+        for (auto& alpha : alphas) {
+            std::cout << alpha << std::endl;
+        }
+    }
+    catch (...)
+    {
+        std::cerr << "failed to load configuration file, exiting" << std::endl;
+        return EXIT_FAILURE;
+    }
+
+    // Establish connection with arm
+    kc::KinovaBaseConnection connection(IP_ADDRESS, PORT, PORT_REAL_TIME, "admin", "kinova1_area4251");
+
+    // Move to safe position
+    kc::move_to_home_position(connection.mBaseClient.get());
+    try
+    {
+        // execute controller
+        example_cyclic_torque_control(
+            connection.mBaseClient.get(), connection.mBaseCyclicClient.get(), connection.mActuatorConfigClient.get());
     }
     catch (k_api::KDetailedException& ex)
     {
-        stopRobot(connection.mActuatorConfigClient.get());
-        handleKinovaException(ex);
+        kc::stopRobot(connection.mActuatorConfigClient.get());
+        kc::handleKinovaException(ex);
         return EXIT_FAILURE;
     }
     catch (std::exception& ex)
     {
-        stopRobot(connection.mActuatorConfigClient.get());
+        kc::stopRobot(connection.mActuatorConfigClient.get());
         std::cout << "Unhandled Error: " << ex.what() << std::endl;
         return EXIT_FAILURE;
     }

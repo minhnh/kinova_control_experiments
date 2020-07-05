@@ -5,6 +5,14 @@ project(KinovaControlExperiments VERSION 0.0.1 LANGUAGES CXX)
 find_package(kdl_parser)
 find_package(orocos_kdl)
 
+# configuration library
+find_library(CONFIG_CPP_LIBRARY "config++" "/usr/lib" "/usr/local/lib")
+if (NOT CONFIG_CPP_LIBRARY)
+    MESSAGE(FATAL_ERROR "required config++ library not found, try installing libconfig++ and libconfig++-dev")
+else()
+    MESSAGE("found config++ library at ${CONFIG_CPP_LIBRARY}")
+endif()
+
 set(CMAKE_INCLUDE_CURRENT_DIR   ON)
 set(CMAKE_VERBOSE_MAKEFILE      OFF)
 set(CMAKE_COLOR_MAKEFILE        ON)
@@ -60,6 +68,7 @@ set_source_files_properties(generated/abag.c PROPERTIES LANGUAGE CXX)
 add_library(kinova_control
     ${PROJECT_SOURCE_DIR}/generated/abag.c
     ${PROJECT_SOURCE_DIR}/src/kinova_util.cpp
+    ${PROJECT_SOURCE_DIR}/src/util.cpp
 )
 
 # find all CPP files in the ./executables directory and create a executable target
@@ -71,5 +80,5 @@ foreach ( SRC_FILE ${EXE_LIST} )
 
     MESSAGE("creating TARGET_EXE_NAME: '${TARGET_EXE_NAME}'")
     add_executable(${TARGET_EXE_NAME} ${SRC_FILE})
-    target_link_libraries(${TARGET_EXE_NAME} kinova_control)
+    target_link_libraries(${TARGET_EXE_NAME} kinova_control ${CONFIG_CPP_LIBRARY})
 endforeach()

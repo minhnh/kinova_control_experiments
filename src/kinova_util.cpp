@@ -7,6 +7,9 @@
 #include "kinova_util.h"
 #include "constants.hpp"
 
+namespace kinova_ctrl
+{
+
 KinovaBaseConnection::KinovaBaseConnection (
     std::string pHost, uint32_t pTcpPort, uint32_t pUdpPort, std::string pUsername, std::string pPassword
 )
@@ -165,34 +168,11 @@ void handleKinovaException(k_api::KDetailedException& ex) {
               << Kinova::Api::SubErrorCodes_Name(Kinova::Api::SubErrorCodes(errorSubCode)) << std::endl;
 }
 
-bool waitMicroSeconds(const sc::time_point<sc::steady_clock> &pStartTime, const sc::microseconds &pDuration)
-{
-    auto now = sc::steady_clock::now();
-    if (now - pStartTime > pDuration) return false;
-
-    do {
-        now = sc::steady_clock::now();
-    } while (now - pStartTime < pDuration);
-    return true;
-}
-
-void writeDataRow(
-    std::ofstream &pFileStream, const abagState_t &pState,
-    long pTime, double &pError, double &pCommand, double &pMeasured
-) {
-    pFileStream << pTime << ","
-                << pError << ","
-                << pState.signedErr_access << ","
-                << pState.bias_access << ","
-                << pState.gain_access << ","
-                << pState.eBar_access << ","
-                << pCommand << ","
-                << pMeasured << std::endl;
-}
-
 void stopRobot(k_api::ActuatorConfig::ActuatorConfigClient* actuator_config) {
     auto control_mode_message = k_api::ActuatorConfig::ControlModeInformation();
     control_mode_message.set_control_mode(k_api::ActuatorConfig::ControlMode::POSITION);
     for (int actuator_id = 1; actuator_id < ACTUATOR_COUNT + 1; actuator_id++)
         actuator_config->SetControlMode(control_mode_message, actuator_id);
 }
+
+}  // namespace kinova_ctrl

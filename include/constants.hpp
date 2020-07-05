@@ -7,9 +7,12 @@
 #include <vector>
 #include <string>
 
-namespace constants {
-
-namespace kinova {
+namespace kinova_ctrl
+{
+namespace constants
+{
+namespace kinova
+{
 
     const std::vector<double> JOINT_ACCEL_LIMITS {5.19, 5.19, 5.19, 5.19, 9.99, 9.99, 9.99};
     const std::vector<double> JOINT_TORQUE {39.0, 39.0, 39.0, 39.0, 9.0, 9.0, 9.0};
@@ -34,8 +37,7 @@ namespace kinova {
     * Arm length: 1.1873m
     */
    const std::string FRAME_END_EFFECTOR = "EndEffector_Link";
-};
-
-};
-
+}  // namespace kinova
+}  // namespace constants
+}  // namespace kinova_ctrl
 #endif
