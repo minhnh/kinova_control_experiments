@@ -51,7 +51,7 @@ void loadUrdfModel(const std::string &pUrdfPath, KDL::Tree &pKinovaTree, KDL::Ch
 
 void move_to_home_position(k_api::Base::BaseClient* pBase, uint32_t pTimeoutSec = 20);
 
-void handleKinovaException(k_api::KDetailedException& ex);
+void printKinovaException(k_api::KDetailedException& ex);
 
 void stopRobot(k_api::ActuatorConfig::ActuatorConfigClient* actuator_config);
 

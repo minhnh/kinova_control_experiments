@@ -158,7 +158,7 @@ void loadUrdfModel(const std::string &pUrdfPath, KDL::Tree &pKinovaTree, KDL::Ch
     pKinovaTree.getChain(constants::kinova::FRAME_JOINT_0, constants::kinova::FRAME_END_EFFECTOR, pKinovaChain);
 }
 
-void handleKinovaException(k_api::KDetailedException& ex) {
+void printKinovaException(k_api::KDetailedException& ex) {
     std::cerr << "Kortex exception: " << ex.what() << std::endl;
     auto errorCode = ex.getErrorInfo().getError().error_code();
     auto errorSubCode = ex.getErrorInfo().getError().error_sub_code();

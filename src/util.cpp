@@ -75,7 +75,7 @@ void loadAbagConfig(const libconfig::Setting &pConfigRoot, const char* pCtrlAppr
     {
         const libconfig::Setting &controlParams = pConfigRoot["controllers"][pCtrlApproach];
 
-        for (auto configName : kc_const::ABAG_CONFIG_NAMES) {
+        for (auto configName : kc_const::config::ABAG_CONFIG_NAMES) {
             std::vector<double> configValues;
             const libconfig::Setting &settings = controlParams.lookup(configName);
             for (int i = 0; i < settings.getLength(); i++) {
@@ -87,6 +87,62 @@ void loadAbagConfig(const libconfig::Setting &pConfigRoot, const char* pCtrlAppr
                 throw std::runtime_error(errMsgStream.str());
             }
             pAbagConfigs[configName] = configValues;
+        }
+    }
+    catch(const libconfig::SettingNotFoundException &nfex)
+    {
+        std::cerr << "setting not found: " << nfex.getPath() << std::endl;
+        throw;
+    }
+    catch(libconfig::SettingTypeException &typeEx)
+    {
+        std::cerr << "type exception: " << typeEx.what() << std::endl;
+        throw;
+    }
+}
+
+void loadKinovaConfig(const libconfig::Setting &pConfigRoot,
+    std::vector<double> &pCartForceLimits, std::string &pHostName, std::string &pUsername, std::string &pPassword,
+    unsigned int &pPort, unsigned int &pPortRealTime
+) {
+    try
+    {
+        std::stringstream errMsgStream;
+        const libconfig::Setting &robotSettings = pConfigRoot["robot"];
+
+        const libconfig::Setting &cartForceSettings = robotSettings[kc_const::config::CART_FORCE_LIMIT.c_str()];
+        for (int i = 0; i < cartForceSettings.getLength(); i++) {
+            pCartForceLimits.push_back(cartForceSettings[i]);
+        }
+        if (pCartForceLimits.size() != 6) {
+            errMsgStream << "loadKinovaConfig: expected 6 params for cartesian force limite, found "
+                         << pCartForceLimits.size();
+            throw std::runtime_error(errMsgStream.str());
+        }
+
+        if (!robotSettings.lookupValue(kc_const::config::HOSTNAME, pHostName)) {
+            errMsgStream << "loadKinovaConfig: failed to load hostname config";
+            throw std::runtime_error(errMsgStream.str());
+        }
+
+        if (!robotSettings.lookupValue(kc_const::config::USER, pUsername)) {
+            errMsgStream << "loadKinovaConfig: failed to load username config";
+            throw std::runtime_error(errMsgStream.str());
+        }
+
+        if (!robotSettings.lookupValue(kc_const::config::PASSWD, pPassword)) {
+            errMsgStream << "loadKinovaConfig: failed to load password config";
+            throw std::runtime_error(errMsgStream.str());
+        }
+
+        if (!robotSettings.lookupValue(kc_const::config::PORT, pPort)) {
+            errMsgStream << "loadKinovaConfig: failed to load port config";
+            throw std::runtime_error(errMsgStream.str());
+        }
+
+        if (!robotSettings.lookupValue(kc_const::config::PORT_RT, pPortRealTime)) {
+            errMsgStream << "loadKinovaConfig: failed to load real-time port config";
+            throw std::runtime_error(errMsgStream.str());
         }
     }
     catch(const libconfig::SettingNotFoundException &nfex)

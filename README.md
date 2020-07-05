@@ -26,6 +26,10 @@ $ git lfs pull
 $ cd kinova_libs && unzip kinova_libs.zip
 ```
 
+The included [configuration file](config/kinova.cfg) is handled using
+[`libconfig`](https://hyperrealm.github.io/libconfig). On Ubuntu all necessary libraries and headers can be installed
+with `sudo apt install libconfig++-dev`.
+
 ## Visualization
 
 Script [`plot_abag_data.py`](executables/plot_abag_data.py) can be used to plot the generated control data.

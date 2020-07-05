@@ -29,6 +29,11 @@ void loadAbagConfig(
     const libconfig::Setting &pConfigRoot, const char* pCtrlApproach, std::map<std::string, std::vector<double>> &
 );
 
+void loadKinovaConfig(
+    const libconfig::Setting &pConfigRoot, std::vector<double> &pCartForceLimits, std::string &pHostName,
+    std::string &pUsername, std::string &pPassword, unsigned int &pPort, unsigned int &pPortRealTime
+);
+
 }  // namespace kinova_ctrl
 
 #endif  // KINOVA_CTRL_UTIL_H

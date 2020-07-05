@@ -20,6 +20,7 @@
 #include "constants.hpp"
 
 #define REPO_DIR "/home/minh/workspace/kinova_control_experiments/"
+#define CONFIG_FILE REPO_DIR"/home/minh/workspace/kinova_control_experiments/"
 #define CTRL_APPROACH "position_velocity"
 
 namespace k_api = Kinova::Api;
@@ -33,35 +34,39 @@ namespace kc_const = kinova_ctrl::constants;
 
 sc::duration <double, std::micro> loop_interval{};
 
-void example_cyclic_torque_control (
+void impedance_control_posvel (
     k_api::Base::BaseClient* base,
     k_api::BaseCyclic::BaseCyclicClient* base_cyclic,
-    k_api::ActuatorConfig::ActuatorConfigClient* actuator_config
+    k_api::ActuatorConfig::ActuatorConfigClient* actuator_config,
+    const std::map<std::string, std::vector<double>> &pAbagConfigs,
+    const std::vector<double> &pCartForceLimits
 )
 {
     const std::string UrdfPath = REPO_DIR + kc_const::kinova::URDF_PATH;
     std::cout << "loading URDF file at: " << UrdfPath << std::endl;
     KDL::Tree kinovaTree; KDL::Chain kinovaChain;
     kc::loadUrdfModel(UrdfPath, kinovaTree, kinovaChain);
-    // Initialize solvers
-    const KDL::JntArray ZERO_ARRAY(7);
-    const KDL::Wrenches ZERO_WRENCHES(kinovaChain.getNrOfSegments(), KDL::Wrench::Zero());
 
+    /* Initialize KDL data structures */
+    int returnFlag = 0;
+    const KDL::JntArray ZERO_ARRAY(ACTUATOR_COUNT);
+    const KDL::Wrenches ZERO_WRENCHES(kinovaChain.getNrOfSegments(), KDL::Wrench::Zero());
+    KDL::JntArray jntCmdTorques(ACTUATOR_COUNT), jntPositions(ACTUATOR_COUNT), jntVelocities(ACTUATOR_COUNT),
+                  jntTorques(ACTUATOR_COUNT), jntImpedanceTorques(ACTUATOR_COUNT);
+    KDL::FrameVel endEffTwist;
+    KDL::JntArrayVel jntPositionVelocity(ACTUATOR_COUNT);
+
+    // end-effector
     KDL::Jacobian jacobianEndEff(kinovaChain.getNrOfJoints());
     KDL::Frame endEffPose;
     Eigen::Matrix<double, 6, 1> endEffForce;
     endEffForce.setZero();
 
-    int returnFlag = 0;
+    /* KDL solvers */
     KDL::ChainJntToJacSolver jacobSolver(kinovaChain);
     KDL::ChainFkSolverPos_recursive fkSolverPos(kinovaChain);
-    auto idSolver = std::make_shared<KDL::ChainIdSolver_RNE>(kinovaChain, KDL::Vector(0.0, 0.0, -9.81289));
-
-    KDL::JntArray jntCmdTorques(7), jntPositions(7), jntVelocities(7), jnt_torque(7), jntImpedanceTorques(7);
-
-    KDL::FrameVel endEffTwist;
     KDL::ChainFkSolverVel_recursive fkSolverVel(kinovaChain);
-    KDL::JntArrayVel jntPositionVelocity(7);
+    auto idSolver = std::make_shared<KDL::ChainIdSolver_RNE>(kinovaChain, KDL::Vector(0.0, 0.0, -9.81289));
 
     // Clearing faults
     try
@@ -74,8 +79,9 @@ void example_cyclic_torque_control (
         throw;
     }
 
-    k_api::BaseCyclic::Feedback base_feedback;
-    k_api::BaseCyclic::Command  base_command;
+    /* Kinova API structures */
+    k_api::BaseCyclic::Feedback baseFb;
+    k_api::BaseCyclic::Command  baseCmd;
     auto servoing_mode = k_api::Base::ServoingModeInformation();
 
     std::cout << "Initializing the arm for torque control example" << std::endl;
@@ -84,7 +90,7 @@ void example_cyclic_torque_control (
     try {
         servoing_mode.set_servoing_mode(k_api::Base::ServoingMode::LOW_LEVEL_SERVOING);
         base->SetServoingMode(servoing_mode);
-        base_feedback = base_cyclic->RefreshFeedback();
+        baseFb = base_cyclic->RefreshFeedback();
     } catch (...) {
         std::cerr << "error setting low level control mode" << std::endl;
         throw;
@@ -93,26 +99,19 @@ void example_cyclic_torque_control (
     // Initialize each actuator to their current position
     // Save the current actuator position, to avoid a following error
     for (int i = 0; i < ACTUATOR_COUNT; i++)
-        base_command.add_actuators()->set_position(base_feedback.actuators(i).position());
+        baseCmd.add_actuators()->set_position(baseFb.actuators(i).position());
 
     // Send a first frame
-    base_feedback = base_cyclic->Refresh(base_command);
+    baseFb = base_cyclic->Refresh(baseCmd);
 
     // Set last actuator in torque mode now that the command is equal to measure
-    auto control_mode_message = k_api::ActuatorConfig::ControlModeInformation();
-    control_mode_message.set_control_mode(k_api::ActuatorConfig::ControlMode::TORQUE);
+    auto ctrlModeInfo = k_api::ActuatorConfig::ControlModeInformation();
+    ctrlModeInfo.set_control_mode(k_api::ActuatorConfig::ControlMode::TORQUE);
 
     for (int actuator_id = 1; actuator_id < ACTUATOR_COUNT + 1; actuator_id++)
-        actuator_config->SetControlMode(control_mode_message, actuator_id);
-
-    const std::vector<double> cart_force_limit {5.0, 5.0, 5.0, 5.0, 5.0, 5.0}; // N
+        actuator_config->SetControlMode(ctrlModeInfo, actuator_id);
 
     // ABAG parameters
-    const double alphas[6] = { 0.9, 0.9, 0.95, 0.9, 0.9, 0.95 };
-    const double biasThresholds[6] = { 0.000407, 0.000407, 0.000407, 0.000407, 0.000407, 0.000407 };
-    const double biasSteps[6] = { 0.000400, 0.000400, 0.000400, 0.000400, 0.000400, 0.000400 };
-    const double gainThresholds[6] = { 0.502492, 0.55, 0.550000, 0.502492, 0.55, 0.550000 };
-    const double gainSteps[6] = { 0.002, 0.003, 0.003, 0.002, 0.003, 0.003 };
     double desiredPosistion[3] = { 0.0 };
     const double desiredTwist[3] = { 0.01, 0.01, 0.01 };
     double errors[6] = { 0.0 };
@@ -160,7 +159,7 @@ void example_cyclic_torque_control (
 
         try
         {
-            base_feedback = base_cyclic->RefreshFeedback();
+            baseFb = base_cyclic->RefreshFeedback();
         }
         catch(...)
         {
@@ -178,9 +177,9 @@ void example_cyclic_torque_control (
 
         for (int i = 0; i < ACTUATOR_COUNT; i++)
         {
-            jntPositions(i) = DEG_TO_RAD(base_feedback.actuators(i).position()); // deg
-            jntVelocities(i) = DEG_TO_RAD(base_feedback.actuators(i).velocity()); // deg
-            jnt_torque(i)   = base_feedback.actuators(i).torque(); // nm
+            jntPositions(i) = DEG_TO_RAD(baseFb.actuators(i).position()); // deg
+            jntVelocities(i) = DEG_TO_RAD(baseFb.actuators(i).velocity()); // deg
+            jntTorques(i)   = baseFb.actuators(i).torque(); // nm
         }
 
         // Kinova API provides only positive angle values
@@ -221,26 +220,19 @@ void example_cyclic_torque_control (
         errors[4] = desiredTwist[1] - endEffTwist.p.v(1);
         errors[5] = desiredTwist[2] - endEffTwist.p.v(2);
 
-        abag_sched(&abagStates[0], &errors[0], &commands[0], &alphas[0],
-                   &biasThresholds[0], &biasSteps[0], &gainThresholds[0], &gainSteps[0]);
-        abag_sched(&abagStates[1], &errors[1], &commands[1], &alphas[1],
-                   &biasThresholds[1], &biasSteps[1], &gainThresholds[1], &gainSteps[1]);
-        abag_sched(&abagStates[2], &errors[2], &commands[2], &alphas[2],
-                   &biasThresholds[2], &biasSteps[2], &gainThresholds[2], &gainSteps[2]);
-        abag_sched(&abagStates[3], &errors[3], &commands[3], &alphas[3],
-                   &biasThresholds[3], &biasSteps[3], &gainThresholds[3], &gainSteps[3]);
-        abag_sched(&abagStates[4], &errors[4], &commands[4], &alphas[4],
-                   &biasThresholds[4], &biasSteps[4], &gainThresholds[4], &gainSteps[4]);
-        abag_sched(&abagStates[5], &errors[5], &commands[5], &alphas[5],
-                   &biasThresholds[5], &biasSteps[5], &gainThresholds[5], &gainSteps[5]);
+        for (int i = 0; i < 6; i++) {
+            abag_sched(&abagStates[i], &errors[i], &commands[i], &(pAbagConfigs.at(kc_const::config::ALPHA)[i]),
+                &(pAbagConfigs.at(kc_const::config::BIAS_THRES)[i]), &(pAbagConfigs.at(kc_const::config::BIAS_STEP)[i]),
+                &(pAbagConfigs.at(kc_const::config::GAIN_THRES)[i]), &(pAbagConfigs.at(kc_const::config::GAIN_STEP)[i]));
+        }
 
-        endEffForce(0) = commands[0] * cart_force_limit[0];
-        endEffForce(1) = commands[1] * cart_force_limit[1];
-        endEffForce(2) = commands[2] * cart_force_limit[2];
+        endEffForce(0) = commands[0] * pCartForceLimits[0];
+        endEffForce(1) = commands[1] * pCartForceLimits[1];
+        endEffForce(2) = commands[2] * pCartForceLimits[2];
 
-        endEffForce(0) += commands[3] * cart_force_limit[3];
-        endEffForce(1) += commands[4] * cart_force_limit[4];
-        endEffForce(2) += commands[5] * cart_force_limit[5];
+        endEffForce(0) += commands[3] * pCartForceLimits[3];
+        endEffForce(1) += commands[4] * pCartForceLimits[4];
+        endEffForce(2) += commands[5] * pCartForceLimits[5];
 
         // std::cout << "ee force: " << endEffForce(0) << ", " << endEffForce(1) << ", " << endEffForce(2) << std::endl;
 
@@ -253,8 +245,8 @@ void example_cyclic_torque_control (
                 jntCmdTorques(i) =  kc_const::kinova::JOINT_TORQUE_LIMITS[i] - 0.001;
             else if (jntCmdTorques(i) <= -kc_const::kinova::JOINT_TORQUE_LIMITS[i])
                 jntCmdTorques(i) = -kc_const::kinova::JOINT_TORQUE_LIMITS[i] + 0.001;
-            base_command.mutable_actuators(i)->set_position(base_feedback.actuators(i).position());
-            base_command.mutable_actuators(i)->set_torque_joint(jntCmdTorques(i));
+            baseCmd.mutable_actuators(i)->set_position(baseFb.actuators(i).position());
+            baseCmd.mutable_actuators(i)->set_torque_joint(jntCmdTorques(i));
         }
 
         // control
@@ -266,15 +258,15 @@ void example_cyclic_torque_control (
         kc::writeDataRow(logVelZ, abagStates[5], totalElapsedTime.count(), errors[5], commands[5], endEffTwist.p.v(2));
 
         // Incrementing identifier ensures actuators can reject out of time frames
-        base_command.set_frame_id(base_command.frame_id() + 1);
-        if (base_command.frame_id() > 65535) base_command.set_frame_id(0);
+        baseCmd.set_frame_id(baseCmd.frame_id() + 1);
+        if (baseCmd.frame_id() > 65535) baseCmd.set_frame_id(0);
 
         for (int idx = 0; idx < ACTUATOR_COUNT; idx++)
-            base_command.mutable_actuators(idx)->set_command_id(base_command.frame_id());
+            baseCmd.mutable_actuators(idx)->set_command_id(baseCmd.frame_id());
 
         try
         {
-            base_feedback = base_cyclic->Refresh(base_command, 0);
+            baseFb = base_cyclic->Refresh(baseCmd, 0);
         }
         catch(...)
         {
@@ -297,7 +289,7 @@ void example_cyclic_torque_control (
     // Set first actuator back in position
     kc::stopRobot(actuator_config);
 
-    // actuator_config->SetControlMode(control_mode_message, last_actuator_device_id);
+    // actuator_config->SetControlMode(ctrlModeInfo, last_actuator_device_id);
     std::cout << "Torque control example completed" << std::endl;
     std::cout << "Number of loops which took longer than specified duration: " << slowLoopCount << std::endl;
 
@@ -321,14 +313,21 @@ int main(int argc, char **argv)
 {
     // Load configurations
     libconfig::Config cfg;    // this needs to exist to query the root setting, otherwise will cause segfault
+    std::map<std::string, std::vector<double>> abagConfigs;
+    std::vector<double> cartForceLimits;
+    std::string hostName, username, password;
+    unsigned int port, portRealTime;
     try
     {
-        libconfig::Setting& root = kc::loadConfigFile(cfg, REPO_DIR"config/abag.cfg");
-        std::map<std::string, std::vector<double>> abagConfigs;
+        libconfig::Setting& root = kc::loadConfigFile(cfg, REPO_DIR"config/kinova.cfg");
+
         kc::loadAbagConfig(root, CTRL_APPROACH, abagConfigs);
-        for (auto& alpha : abagConfigs[kc_const::ALPHA]) {
-            std::cout << alpha << std::endl;
-        }
+
+        kc::loadKinovaConfig(root, cartForceLimits, hostName, username, password, port, portRealTime);
+        std::cout << "Robot configurations:" << std::endl
+                  << "  Hostname: " << hostName << std::endl
+                  << "  Username: " << username << ", password: " << password << std::endl
+                  << "  Port: " << port << ", real-time port: " << portRealTime << std::endl;
     }
     catch (const std::exception &ex)
     {
@@ -336,28 +335,38 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    // Establish connection with arm
-    kc::KinovaBaseConnection connection(IP_ADDRESS, PORT, PORT_REAL_TIME, "admin", "kinova1_area4251");
-
-    // Move to safe position
-    kc::move_to_home_position(connection.mBaseClient.get());
     try
     {
-        // execute controller
-        example_cyclic_torque_control(
-            connection.mBaseClient.get(), connection.mBaseCyclicClient.get(), connection.mActuatorConfigClient.get());
+        // Establish connection with arm
+        kc::KinovaBaseConnection connection(hostName, port, portRealTime, username, password);
+
+        try
+        {
+            // Move to safe position
+            kc::move_to_home_position(connection.mBaseClient.get());
+            // execute controller
+            impedance_control_posvel(
+                connection.mBaseClient.get(), connection.mBaseCyclicClient.get(), connection.mActuatorConfigClient.get(),
+                abagConfigs, cartForceLimits);
+        }
+        catch (k_api::KDetailedException& ex)
+        {
+            kc::stopRobot(connection.mActuatorConfigClient.get());
+            kc::printKinovaException(ex);
+            return EXIT_FAILURE;
+        }
+        catch (const std::exception& ex)
+        {
+            kc::stopRobot(connection.mActuatorConfigClient.get());
+            std::cout << "Unhandled Error: " << ex.what() << std::endl;
+            return EXIT_FAILURE;
+        }
     }
-    catch (k_api::KDetailedException& ex)
+    catch (const std::exception &ex)
     {
-        kc::stopRobot(connection.mActuatorConfigClient.get());
-        kc::handleKinovaException(ex);
+        std::cerr << "error while establishing connection: " << ex.what() << std::endl;
         return EXIT_FAILURE;
     }
-    catch (std::exception& ex)
-    {
-        kc::stopRobot(connection.mActuatorConfigClient.get());
-        std::cout << "Unhandled Error: " << ex.what() << std::endl;
-        return EXIT_FAILURE;
-    }
+
     return EXIT_SUCCESS;
 }

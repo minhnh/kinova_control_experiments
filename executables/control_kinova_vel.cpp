@@ -30,7 +30,7 @@ namespace kc_const = kinova_ctrl::constants;
 
 std::chrono::duration <double, std::micro> loop_interval{};
 
-void example_cyclic_torque_control (
+void impedance_control_vel (
     k_api::Base::BaseClient* base,
     k_api::BaseCyclic::BaseCyclicClient* base_cyclic,
     k_api::ActuatorConfig::ActuatorConfigClient* actuator_config
@@ -302,12 +302,12 @@ int main(int argc, char **argv)
     kc::move_to_home_position(connection.mBaseClient.get());
     try
     {
-        example_cyclic_torque_control(connection.mBaseClient.get(), connection.mBaseCyclicClient.get(), connection.mActuatorConfigClient.get());
+        impedance_control_vel(connection.mBaseClient.get(), connection.mBaseCyclicClient.get(), connection.mActuatorConfigClient.get());
     }
     catch (k_api::KDetailedException& ex)
     {
         kc::stopRobot(connection.mActuatorConfigClient.get());
-        kc::handleKinovaException(ex);
+        kc::printKinovaException(ex);
         return EXIT_FAILURE;
     }
     catch (std::exception& ex)
