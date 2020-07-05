@@ -5,6 +5,7 @@
 #define KINOVA_CTRL_UTIL_H
 
 #include <fstream>
+#include <map>
 #include <vector>
 #include <chrono>
 #include <libconfig.h++>
@@ -24,7 +25,9 @@ void writeDataRow(
 
 libconfig::Setting & loadConfigFile(libconfig::Config &cfg, const char* pFileName);
 
-void loadAbagConfig(const libconfig::Setting &pConfigRoot, const char* pCtrlApproach, std::vector<double> &pAlphas);
+void loadAbagConfig(
+    const libconfig::Setting &pConfigRoot, const char* pCtrlApproach, std::map<std::string, std::vector<double>> &
+);
 
 }  // namespace kinova_ctrl
 

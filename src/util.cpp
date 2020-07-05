@@ -2,7 +2,12 @@
  * @copyright 2020 Minh Nguyen
  */
 #include <iostream>
+#include <sstream>
+#include <string.h>
 #include "util.h"
+#include "constants.hpp"
+
+namespace kc_const = kinova_ctrl::constants;
 
 namespace kinova_ctrl
 {
@@ -53,19 +58,35 @@ libconfig::Setting & loadConfigFile(libconfig::Config &pCfg, const char* pFileNa
     return pCfg.getRoot();
 }
 
-void loadAbagConfig(const libconfig::Setting &pConfigRoot, const char* pCtrlApproach, std::vector<double> &pAlphas)
-{
+void loadAbagConfig(const libconfig::Setting &pConfigRoot, const char* pCtrlApproach,
+    std::map<std::string, std::vector<double>> &pAbagConfigs
+) {
+    std::stringstream errMsgStream;
+    unsigned int expectedParamNum = 0;
+    if      (strcmp(pCtrlApproach, "position_velocity") == 0)   expectedParamNum = 6;
+    else if (strcmp(pCtrlApproach, "position") == 0)            expectedParamNum = 3;
+    else if (strcmp(pCtrlApproach, "velocity") == 0)            expectedParamNum = 3;
+    else {
+        errMsgStream << "loadAbagConfig: unexpected control approach: " << pCtrlApproach;
+        throw std::runtime_error(errMsgStream.str());
+    }
+
     try
     {
-        std::cout << pCtrlApproach << std::endl;
-        const libconfig::Setting &controllers = pConfigRoot["controllers"];
-        std::cout << "got controllers" << std::endl;
-        const libconfig::Setting &controlParams = controllers[pCtrlApproach];
-        std::cout << "got control params" << std::endl;
-        const libconfig::Setting &alphaSettings = controlParams.lookup("alpha");
+        const libconfig::Setting &controlParams = pConfigRoot["controllers"][pCtrlApproach];
 
-        for (int i = 0; i < alphaSettings.getLength(); i++) {
-            pAlphas.push_back(alphaSettings[i]);
+        for (auto configName : kc_const::ABAG_CONFIG_NAMES) {
+            std::vector<double> configValues;
+            const libconfig::Setting &settings = controlParams.lookup(configName);
+            for (int i = 0; i < settings.getLength(); i++) {
+                configValues.push_back(settings[i]);
+            }
+            if (configValues.size() != expectedParamNum) {
+                errMsgStream << "loadAbagConfig: expected " << expectedParamNum
+                            << " params for alpha, found " << configValues.size();
+                throw std::runtime_error(errMsgStream.str());
+            }
+            pAbagConfigs[configName] = configValues;
         }
     }
     catch(const libconfig::SettingNotFoundException &nfex)

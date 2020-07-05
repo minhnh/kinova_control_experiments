@@ -104,7 +104,6 @@ void example_cyclic_torque_control (
     for (int actuator_id = 1; actuator_id < ACTUATOR_COUNT + 1; actuator_id++)
         actuator_config->SetControlMode(control_mode_message, actuator_id);
 
-    const std::vector<double> joint_torque_limits {39.0, 39.0, 39.0, 39.0, 9.0, 9.0, 9.0};
     const std::vector<double> cart_force_limit {5.0, 5.0, 5.0, 5.0, 5.0, 5.0}; // N
 
     // ABAG parameters
@@ -236,8 +235,10 @@ void example_cyclic_torque_control (
         for (int i = 0; i < ACTUATOR_COUNT; i++)
         {
             jntCmdTorques(i) = jntCmdTorques(i) + jntImpedanceTorques(i);
-            if      (jntCmdTorques(i) >=  joint_torque_limits[i]) jntCmdTorques(i) =  joint_torque_limits[i] - 0.001;
-            else if (jntCmdTorques(i) <= -joint_torque_limits[i]) jntCmdTorques(i) = -joint_torque_limits[i] + 0.001;
+            if      (jntCmdTorques(i) >=  kc_const::kinova::JOINT_TORQUE_LIMITS[i])
+                jntCmdTorques(i) =  kc_const::kinova::JOINT_TORQUE_LIMITS[i] - 0.001;
+            else if (jntCmdTorques(i) <= -kc_const::kinova::JOINT_TORQUE_LIMITS[i])
+                jntCmdTorques(i) = -kc_const::kinova::JOINT_TORQUE_LIMITS[i] + 0.001;
             base_command.mutable_actuators(i)->set_position(base_feedback.actuators(i).position());
             base_command.mutable_actuators(i)->set_torque_joint(jntCmdTorques(i));
         }
