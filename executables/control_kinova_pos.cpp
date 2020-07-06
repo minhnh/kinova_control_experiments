@@ -177,7 +177,7 @@ void impedance_control_pos (
             desiredPos[2] = endEffPose.p(2) + 0.03;
             // write desired position and zero velocities
             desiredPositionLog << desiredPos[0] << "," << desiredPos[1] << ","
-                               << desiredPos[2] << "0.0, 0.0, 0.0" << std::endl;
+                               << desiredPos[2] << ", 0.0, 0.0, 0.0" << std::endl;
             if (desiredPositionLog.is_open()) desiredPositionLog.close();
         }
 
@@ -194,8 +194,9 @@ void impedance_control_pos (
         endEffForce(2) = commandPos[2] * pCartForceLimits[2];
 
         jntImpedanceTorques.data = jacobianEndEff.data.transpose() * endEffForce;
+        // std::cout << "ee force: " << endEffForce(0) << ", " << endEffForce(1) << ", " << endEffForce(2) << std::endl;
+        // std::cout << "jnt cmd torques: " << jntCmdTorques.data.transpose() << std::endl;
 
-        // std::cout << errorX << ", " << errorY << ", " << errorZ << std::endl;
         for (int i = 0; i < ACTUATOR_COUNT; i++)
         {
             jntCmdTorques(i) = jntCmdTorques(i) + jntImpedanceTorques(i);
@@ -207,7 +208,6 @@ void impedance_control_pos (
             baseCmd.mutable_actuators(i)->set_torque_joint(jntCmdTorques(i));
         }
 
-        // std::cout << jntCmdTorques.data.transpose() << std::endl;
         // write to log files
         kc::writeDataRow(logPosX, abagStatePos[0], totalElapsedTime.count(), errorPos[0], commandPos[0], endEffPose.p(0));
         kc::writeDataRow(logPosY, abagStatePos[1], totalElapsedTime.count(), errorPos[1], commandPos[1], endEffPose.p(1));

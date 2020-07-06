@@ -199,6 +199,8 @@ void impedance_control_vel (
         endEffForce(2) = commandVel[2] * pCartForceLimits[2];
 
         jntImpedanceTorques.data = jacobianEndEff.data.transpose() * endEffForce;
+        // std::cout << "ee force: " << endEffForce(0) << ", " << endEffForce(1) << ", " << endEffForce(2) << std::endl;
+        // std::cout << "jnt cmd torques: " << jntCmdTorques.data.transpose() << std::endl;
 
         for (int i = 0; i < ACTUATOR_COUNT; i++)
         {

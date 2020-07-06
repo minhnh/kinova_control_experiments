@@ -222,9 +222,9 @@ void impedance_control_posvel (
         endEffForce(1) += commands[4] * pCartForceLimits[4];
         endEffForce(2) += commands[5] * pCartForceLimits[5];
 
-        // std::cout << "ee force: " << endEffForce(0) << ", " << endEffForce(1) << ", " << endEffForce(2) << std::endl;
-
         jntImpedanceTorques.data = jacobianEndEff.data.transpose() * endEffForce;
+        // std::cout << "ee force: " << endEffForce(0) << ", " << endEffForce(1) << ", " << endEffForce(2) << std::endl;
+        // std::cout << "jnt cmd torques: " << jntCmdTorques.data.transpose() << std::endl;
 
         for (int i = 0; i < ACTUATOR_COUNT; i++)
         {
