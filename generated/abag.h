@@ -9,8 +9,8 @@ extern "C" {
 
 /* struct declarations */
 typedef struct abagState_st {
-  double eBarDelay[1];
-  int delayIndex_access;
+  double eBarDelay_access[1];
+  int delayRearIndex_access;
   double gain_access;
   double bias_access;
   double signedErr_access;

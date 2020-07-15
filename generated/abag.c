@@ -2,8 +2,8 @@
 
 /* functions to initialize structs of DataBlockContainer's */
 void initialize_abagState(abagState_t * abagState) {
-  abagState->eBarDelay[0] = 0.0L;
-  abagState->delayIndex_access = 0;
+  abagState->eBarDelay_access[0] = 0.0L;
+  abagState->delayRearIndex_access = 0;
   abagState->gain_access = 0.0L;
   abagState->bias_access = 0.0L;
   abagState->signedErr_access = 0.0L;
@@ -91,14 +91,16 @@ void gainAdapater_sched(double const * e_bar, double const * gain_threshold, dou
 /* definitions of root schedules */
 void abag_sched(abagState_t * abagState, double const * error, double * actuation, double const * alpha, double const * biasThreshold, double const * biasStep, double const * gainThreshold, double const * gainStep) {
   /* data block declarations */
+  double filteredErrPrev_e_bar_prev = 0.0L;
 
   /* fixed data flow schedule */
   errSign(error, &(abagState->signedErr_access));
-  errSignFilter(alpha, &(abagState->signedErr_access), &(abagState->eBarDelay[abagState->delayIndex_access]), &(abagState->eBar_access));
+  filteredErrPrev_e_bar_prev = abagState->eBarDelay_access[abagState->delayRearIndex_access];
+  errSignFilter(alpha, &(abagState->signedErr_access), &filteredErrPrev_e_bar_prev, &(abagState->eBar_access));
   biasAdapter_sched(&(abagState->eBar_access), biasThreshold, biasStep, &(abagState->bias_access));
   gainAdapater_sched(&(abagState->eBar_access), gainThreshold, gainStep, &(abagState->gain_access));
   fb_sched(&(abagState->signedErr_access), actuation, &(abagState->gain_access), &(abagState->bias_access));
-  delayEbar(&(abagState->eBar_access), &(abagState->delayIndex_access), abagState->eBarDelay);
+  delayEbar(&(abagState->eBar_access), &(abagState->delayRearIndex_access), abagState->eBarDelay_access);
 
   /* update output ports */
 }
