@@ -11,7 +11,7 @@ void initialize_abagState(abagState_t * abagState) {
 }
 
 /* definitions of contained functions and schedules */
-void fb_sched(double const * error_sign, double * actuation, double const * gain, double const * bias) {
+void fb_sched(const double * error_sign, double * actuation, const double * gain, const double * bias) {
   /* data block declarations */
   double gainedErrSgn_ge_sgn = 0.0L;
   double actuation_access = 0.0L;
@@ -28,22 +28,22 @@ void fb_sched(double const * error_sign, double * actuation, double const * gain
   *actuation = actuation_access;
 }
 
-void errSign(double const * input, double * output) {
+void errSign(const double * input, double * output) {
   *output = (double)( (0 < *input) - (*input < 0) );
 }
 
-void errSignFilter(double const * filterFactor, double const * signedErr, double const * lowPassErrPrev, double * lowPassErr) {
+void errSignFilter(const double * filterFactor, const double * signedErr, const double * lowPassErrPrev, double * lowPassErr) {
   *lowPassErr = (*filterFactor) * (*lowPassErrPrev) + (1 - (*filterFactor)) * (*signedErr);
 }
 
-void delayEbar(double const * input, int * rearIndex, double delay[]) {
+void delayEbar(const double * input, int * rearIndex, double delay[]) {
   delay[(*rearIndex)++] = *input;
   if (*rearIndex == 1) {
     *rearIndex = 0;
   }
 }
 
-void biasAdapter_sched(double const * e_bar, double const * bias_threshold, double const * bias_step, double * adapted_bias) {
+void biasAdapter_sched(const double * e_bar, const double * bias_threshold, const double * bias_step, double * adapted_bias) {
   /* data block declarations */
   double decision_access = 0.0L;
   double bias_step_access = 0.0L;
@@ -65,7 +65,7 @@ void biasAdapter_sched(double const * e_bar, double const * bias_threshold, doub
   /* update output ports */
 }
 
-void gainAdapater_sched(double const * e_bar, double const * gain_threshold, double const * gain_step, double * adapted_gain) {
+void gainAdapater_sched(const double * e_bar, const double * gain_threshold, const double * gain_step, double * adapted_gain) {
   /* data block declarations */
   double decision_access = 0.0L;
   double gain_step_access = 0.0L;
@@ -89,14 +89,14 @@ void gainAdapater_sched(double const * e_bar, double const * gain_threshold, dou
 
 
 /* definitions of root schedules */
-void abag_sched(abagState_t * abagState, double const * error, double * actuation, double const * alpha, double const * biasThreshold, double const * biasStep, double const * gainThreshold, double const * gainStep) {
+void abag_sched(abagState_t * abagState, const double * error, double * actuation, const double * alpha, const double * biasThreshold, const double * biasStep, const double * gainThreshold, const double * gainStep) {
   /* data block declarations */
-  double filteredErrPrev_e_bar_prev = 0.0L;
+  double * filteredErrPrev_e_bar_prev = ((double *) 0);
 
   /* fixed data flow schedule */
   errSign(error, &(abagState->signedErr_access));
-  filteredErrPrev_e_bar_prev = abagState->eBarDelay_access[abagState->delayRearIndex_access];
-  errSignFilter(alpha, &(abagState->signedErr_access), &filteredErrPrev_e_bar_prev, &(abagState->eBar_access));
+  filteredErrPrev_e_bar_prev = abagState->eBarDelay_access + abagState->delayRearIndex_access;
+  errSignFilter(alpha, &(abagState->signedErr_access), filteredErrPrev_e_bar_prev, &(abagState->eBar_access));
   biasAdapter_sched(&(abagState->eBar_access), biasThreshold, biasStep, &(abagState->bias_access));
   gainAdapater_sched(&(abagState->eBar_access), gainThreshold, gainStep, &(abagState->gain_access));
   fb_sched(&(abagState->signedErr_access), actuation, &(abagState->gain_access), &(abagState->bias_access));

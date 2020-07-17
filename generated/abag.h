@@ -20,15 +20,15 @@ void initialize_abagState(abagState_t *);
 
 
 /* declarations of contained functions and schedules */
-void fb_sched(double const * error_sign, double * actuation, double const * gain, double const * bias);
-void errSign(double const * input, double * output);
-void errSignFilter(double const * filterFactor, double const * signedErr, double const * lowPassErrPrev, double * lowPassErr);
-void delayEbar(double const * input, int * rearIndex, double delay[]);
-void biasAdapter_sched(double const * e_bar, double const * bias_threshold, double const * bias_step, double * adapted_bias);
-void gainAdapater_sched(double const * e_bar, double const * gain_threshold, double const * gain_step, double * adapted_gain);
+void fb_sched(const double * error_sign, double * actuation, const double * gain, const double * bias);
+void errSign(const double * input, double * output);
+void errSignFilter(const double * filterFactor, const double * signedErr, const double * lowPassErrPrev, double * lowPassErr);
+void delayEbar(const double * input, int * rearIndex, double delay[]);
+void biasAdapter_sched(const double * e_bar, const double * bias_threshold, const double * bias_step, double * adapted_bias);
+void gainAdapater_sched(const double * e_bar, const double * gain_threshold, const double * gain_step, double * adapted_gain);
 
 /* declarations of root schedules */
-void abag_sched(abagState_t * abagState, double const * error, double * actuation, double const * alpha, double const * biasThreshold, double const * biasStep, double const * gainThreshold, double const * gainStep);
+void abag_sched(abagState_t * abagState, const double * error, double * actuation, const double * alpha, const double * biasThreshold, const double * biasStep, const double * gainThreshold, const double * gainStep);
 
 #ifdef __cplusplus
 }
